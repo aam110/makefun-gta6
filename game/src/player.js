@@ -1,198 +1,184 @@
-// Rio on foot: WASD movement relative to the camera, sprint, jump, walk
-// animation, aiming with the mouse, and the smooth third-person camera rig
-// (closer on foot, pulled back and behind the car while driving).
-
+// Rio Vale: on-foot movement, stealing and driving cars, health and money.
 import * as THREE from 'three';
-import { clamp, lerp, angleLerp, angleDiff, distXZ, TAU } from './config.js';
-import { createPersonMesh } from './pedestrians.js';
-import { collideCircle } from './world.js';
-import { moveAxes, isDown, wasPressed } from './input.js';
-import { tryEnterCar, exitCar, nearestCar, driveCar } from './vehicles.js';
-import { fireWeapon, reloadWeapon, finishReload, switchWeapon, aimPoint } from './combat.js';
+import { CFG, S, clamp } from './config.js';
+import { makePersonMesh, animateWalk, hurtPed } from './pedestrians.js';
+import { resolveCollisions } from './world.js';
+import { updatePlayerCar, destroyCar } from './vehicles.js';
+import { Input } from './input.js';
+import { AudioSys } from './audio.js';
+import { addWanted } from './police.js';
 
-export function createPlayer(G, jacketColor) {
-  const parts = createPersonMesh(jacketColor, 0xf2c49b, { pants: 0x232830, hair: 0x2a1d12 });
-  parts.group.position.set(G.player.x, 0, G.player.z);
-  G.scene.add(parts.group);
-  Object.assign(G.player, parts);
-  G.player.walkPhase = 0;
-  G.player.jumpV = 0;
-  G.player.y = 0;
+export function createPlayer(x = 0, z = 60) {
+  const mesh = makePersonMesh({ shirt: 0x1b9aaa, pants: 0x2c3e50, hair: 0x2b1d12 });
+  mesh.position.set(x, 0, z);
+  S.scene.add(mesh);
+  S.player = {
+    mesh,
+    heading: Math.PI,
+    health: CFG.PLAYER_HEALTH,
+    money: 0,
+    weapon: 'pistol',
+    ammo: { pistol: { mag: 12, res: 96 }, smg: { mag: 30, res: 120 } },
+    car: null,
+    onFoot: true,
+    walkPhase: 0,
+    speed: 0,
+    hurtFlash: 0,
+    invuln: 0,
+  };
+  return S.player;
 }
 
-export function updatePlayer(G, dt) {
-  const p = G.player;
-  const input = G.input;
+function nearestStealable(maxDist) {
+  const p = S.player.mesh.position;
+  let best = null, bd = maxDist * maxDist;
+  const cands = [
+    ...S.parked,
+    ...S.traffic.map((t) => t.car),
+  ];
+  for (const car of cands) {
+    if (car.dead || car.driver === 'player') continue;
+    if (car.driver === 'traffic' && Math.abs(car.speed) > 2) continue;
+    const d2 = (car.mesh.position.x - p.x) ** 2 + (car.mesh.position.z - p.z) ** 2;
+    if (d2 < bd) { bd = d2; best = car; }
+  }
+  return best;
+}
 
-  // weapon switching + reload (both modes)
-  if (wasPressed(input, 'Digit1')) switchWeapon(G, 'pistol');
-  if (wasPressed(input, 'Digit2')) switchWeapon(G, 'smg');
-  if (wasPressed(input, 'KeyR')) reloadWeapon(G);
-  if (p.reloading && G.elapsed >= p.reloadEndsAt) finishReload(G);
-  // keep per-weapon magazine state
-  p.magState[p.weapon] = p.ammoInMag;
+export function tryEnterCar() {
+  const p = S.player;
+  if (!p.onFoot) return;
+  const car = nearestStealable(4.5);
+  if (!car) return;
+  // Leaving a traffic car driverless: remove it from the traffic roster.
+  const ti = S.traffic.findIndex((t) => t.car === car);
+  if (ti !== -1) S.traffic.splice(ti, 1);
+  const pi = S.parked.indexOf(car);
+  if (pi !== -1) S.parked.splice(pi, 1);
+  car.driver = 'player';
+  car.parked = false;
+  p.car = car;
+  p.onFoot = false;
+  p.mesh.visible = false;
+  S.stats.carsStolen++;
+  AudioSys.click();
+  if (car.missionTarget) {
+    // Hot Wheels: the alarm screams.
+    addWanted(1, 'car alarm');
+    if (window.__onMissionCarStolen) window.__onMissionCarStolen();
+  } else if (car.driverWasTraffic || ti !== -1) {
+    addWanted(1, 'carjacking');
+  } else {
+    addWanted(1, 'theft');
+  }
+}
 
+export function exitCar() {
+  const p = S.player;
+  if (p.onFoot || !p.car) return;
+  const car = p.car;
+  car.speed = 0;
+  const side = { x: Math.cos(car.heading), z: -Math.sin(car.heading) };
+  const px = car.mesh.position.x + side.x * 2.6;
+  const pz = car.mesh.position.z + side.z * 2.6;
+  const fixed = resolveCollisions(px, pz, CFG.PLAYER_RADIUS);
+  p.mesh.position.set(fixed.x, 0, fixed.z);
+  p.mesh.visible = true;
+  p.heading = car.heading;
+  p.mesh.rotation.y = p.heading;
+  p.car = null;
+  p.onFoot = true;
+  AudioSys.engine(false, 0);
+  AudioSys.click();
+}
+
+export function hurtPlayer(amount) {
+  const p = S.player;
+  if (!p || S.over || p.invuln > 0) return;
+  p.health = Math.max(0, p.health - amount);
+  p.hurtFlash = 1;
+  p.invuln = 0.15;
+  if (p.health <= 0) {
+    S.over = true;
+    S.overKind = 'wasted';
+    AudioSys.wasted();
+    AudioSys.engine(false, 0);
+  }
+}
+
+export function healPlayer(amount) {
+  const p = S.player;
+  p.health = Math.min(CFG.PLAYER_HEALTH, p.health + amount);
+}
+
+export function addMoney(amount) {
+  S.player.money += amount;
+  AudioSys.cash();
+}
+
+export function updatePlayer(dt, camYaw) {
+  const p = S.player;
+  if (!p || S.over) return;
+  p.hurtFlash = Math.max(0, p.hurtFlash - dt * 2);
+  p.invuln = Math.max(0, p.invuln - dt);
+  // Slow health regen out of combat.
+  if (p.health > 0 && p.health < CFG.PLAYER_HEALTH && S.wanted === 0) {
+    p.health = Math.min(CFG.PLAYER_HEALTH, p.health + dt * 1.2);
+  }
   if (!p.onFoot && p.car) {
-    updateDriving(G, dt);
+    const { f, s } = Input.axis();
+    updatePlayerCar(dt, f, s);
+    p.mesh.position.copy(p.car.mesh.position);
+    p.heading = p.car.heading;
+    p.speed = Math.abs(p.car.speed);
+    // Running over pedestrians is a crime.
+    for (const ped of S.peds) {
+      if (ped.dead) continue;
+      const d2 = (ped.mesh.position.x - p.mesh.position.x) ** 2 + (ped.mesh.position.z - p.mesh.position.z) ** 2;
+      if (d2 < 3.2 && p.speed > 4) {
+        const wasAlive = ped.health > 0;
+        hurtPed(ped, 200, p.mesh.position.x, p.mesh.position.z);
+        if (wasAlive) addWanted(1, 'hit and run');
+      }
+    }
     return;
   }
-  updateOnFoot(G, dt);
-}
-
-function updateOnFoot(G, dt) {
-  const p = G.player;
-  const input = G.input;
-  const cam = G.cameraRig;
-
-  // camera yaw follows the mouse (pointer lock) or auto-follows movement
-  if (input.locked) {
-    cam.yaw -= input.mouseDX * 0.0026;
-    cam.pitch = clamp(cam.pitch + input.mouseDY * 0.0022, -0.15, 0.9);
-  }
-  const axes = moveAxes(input);
-  const sprint = isDown(input, 'ShiftLeft', 'ShiftRight');
-  const speed = sprint ? 9.5 : 5.2;
-  const moving = axes.x !== 0 || axes.y !== 0;
-
-  // aiming: right mouse held, or firing — Rio faces the mouse aim point
-  const aiming = input.rightDown || input.mouseDown;
-  if (aiming) {
-    const aim = aimPoint(G);
-    const want = Math.atan2(-(aim.x - p.x), -(aim.z - p.z));
-    p.heading = angleLerp(p.heading, want, Math.min(1, dt * 14));
-  } else if (moving) {
-    const moveAngle = Math.atan2(axes.x, axes.y);
-    const want = cam.yaw + moveAngle;
-    p.heading = angleLerp(p.heading, want, Math.min(1, dt * 10));
-    cam.yaw = angleLerp(cam.yaw, p.heading, Math.min(1, dt * 1.2));
-  }
-
-  if (moving) {
-    const dirAngle = cam.yaw + Math.atan2(axes.x, axes.y);
-    const mx = -Math.sin(dirAngle);
-    const mz = -Math.cos(dirAngle);
-    const pos = { x: p.x + mx * speed * dt, z: p.z + mz * speed * dt };
-    collideCircle(G, pos, 0.55);
-    p.x = pos.x;
-    p.z = pos.z;
-    p.walkPhase += dt * speed * 2.4;
-    const swing = Math.sin(p.walkPhase) * (sprint ? 0.95 : 0.6);
-    p.legL.rotation.x = swing;
-    p.legR.rotation.x = -swing;
-    p.armL.rotation.x = aiming ? -1.2 : -swing * 0.7;
-    p.armR.rotation.x = aiming ? -1.2 : swing * 0.7;
+  // On foot.
+  const { f, s } = Input.axis();
+  const sprint = Input.down('ShiftLeft') || Input.down('ShiftRight');
+  const speed = sprint ? CFG.SPRINT_SPEED : CFG.WALK_SPEED;
+  let mx = 0, mz = 0;
+  if (f !== 0 || s !== 0) {
+    // Camera-relative movement: forward is where the camera looks.
+    const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+    const rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
+    mx = fx * f + rx * s;
+    mz = fz * f + rz * s;
+    const len = Math.hypot(mx, mz) || 1;
+    mx /= len; mz /= len;
+    p.heading = Math.atan2(mx, mz);
+    p.mesh.rotation.y = p.heading;
+    const nx = p.mesh.position.x + mx * speed * dt;
+    const nz = p.mesh.position.z + mz * speed * dt;
+    const fixed = resolveCollisions(
+      clamp(nx, -CFG.CITY_R - 30, CFG.CITY_R + 30),
+      clamp(nz, -CFG.CITY_R - 30, CFG.CITY_R + 55),
+      CFG.PLAYER_RADIUS,
+    );
+    p.mesh.position.x = fixed.x;
+    p.mesh.position.z = fixed.z;
+    p.speed = speed;
+    p.walkPhase += dt * (sprint ? 13 : 9);
+    animateWalk(p.mesh, p.walkPhase, sprint ? 0.85 : 0.6);
+    p.mesh.position.y = Math.abs(Math.sin(p.walkPhase)) * 0.06;
   } else {
-    p.legL.rotation.x = lerp(p.legL.rotation.x, 0, dt * 10);
-    p.legR.rotation.x = lerp(p.legR.rotation.x, 0, dt * 10);
-    p.armL.rotation.x = lerp(p.armL.rotation.x, aiming ? -1.2 : 0, dt * 10);
-    p.armR.rotation.x = lerp(p.armR.rotation.x, aiming ? -1.2 : 0, dt * 10);
+    p.speed = 0;
+    p.mesh.position.y = 0;
+    animateWalk(p.mesh, p.walkPhase, 0);
   }
-
-  // jump
-  if (wasPressed(input, 'Space') && p.y <= 0.01) p.jumpV = 6.5;
-  if (p.y > 0 || p.jumpV > 0) {
-    p.jumpV -= 18 * dt;
-    p.y = Math.max(0, p.y + p.jumpV * dt);
-    if (p.y === 0) p.jumpV = 0;
+  // Interact prompt for nearby cars.
+  if (!S.interactTarget) {
+    const car = nearestStealable(4.5);
+    if (car) S.interactTarget = { label: car.missionTarget ? 'Press F — steal the marked car' : 'Press F — steal car', fn: tryEnterCar, kind: 'car' };
   }
-
-  // shooting: SMG fires while held; pistol fires on each click. A click is
-  // an edge event (mouseClicked), so a quick click still fires even when
-  // frames are slow — requiring mouseDown too would drop clicks between frames.
-  const w = G.player.weapon;
-  const wantsFire = w === 'smg' ? input.mouseDown : input.mouseClicked;
-  if (wantsFire) fireWeapon(G);
-
-  // enter / steal car
-  if (wasPressed(input, 'KeyF')) {
-    if (!tryEnterCar(G)) G.hud.notify('No car nearby — get closer', 'bad');
-  }
-  const near = nearestCar(G, p.x, p.z, 4.2);
-  if (near) {
-    const label = near.driver === 'traffic' || near.driver === 'police'
-      ? `Press F to carjack the ${near.name}`
-      : `Press F to enter the ${near.name}`;
-    G.hud.setHint(`<b>F</b> — ${label}`);
-  } else if (G.mission.active === false) {
-    const m = G.modules.missions.currentMission(G);
-    if (m && distXZ(p.x, p.z, m.start.x, m.start.z) < 12) G.hud.setHint('Walk into the <b>yellow beam</b> to start the mission');
-    else G.hud.setHint('');
-  } else G.hud.setHint('');
-
-  p.group.position.set(p.x, p.y, p.z);
-  p.group.rotation.y = p.heading;
-  G.audio.setEngine(0, false);
-}
-
-function updateDriving(G, dt) {
-  const p = G.player;
-  const car = p.car;
-  const input = G.input;
-  const cam = G.cameraRig;
-
-  if (input.locked) {
-    cam.yaw -= input.mouseDX * 0.0026;
-    cam.pitch = clamp(cam.pitch + input.mouseDY * 0.0022, -0.1, 0.7);
-  }
-  const axes = moveAxes(input);
-  const handbrake = isDown(input, 'Space');
-  const boost = isDown(input, 'ShiftLeft', 'ShiftRight');
-  let throttle = axes.y;
-  if (boost && throttle > 0) throttle = 1.35;
-  driveCar(G, car, dt, throttle, -axes.x, handbrake);
-  p.x = car.x;
-  p.z = car.z;
-  p.heading = car.heading;
-  // camera drifts behind the car
-  if (!input.locked) cam.yaw = angleLerp(cam.yaw, car.heading, Math.min(1, dt * 1.6));
-
-  // drive-by: shoot toward the mouse aim point from the car
-  if (p.weapon === 'smg' ? input.mouseDown : input.mouseClicked) fireWeapon(G);
-
-  // exit
-  if (wasPressed(input, 'KeyF')) exitCar(G);
-  // horn
-  if (wasPressed(input, 'KeyH')) G.audio.horn();
-
-  G.hud.setHint('<b>F</b> — exit car &nbsp;·&nbsp; <b>CLICK</b> — drive-by &nbsp;·&nbsp; <b>SPACE</b> — handbrake');
-  G.audio.setEngine(clamp(Math.abs(car.speed) / car.spec.topSpeed, 0, 1), true);
-}
-
-// ---- Camera rig ----
-
-export function createCameraRig() {
-  return {
-    yaw: Math.PI, pitch: 0.32, dist: 8.5,
-    pos: new THREE.Vector3(0, 6, 20),
-    look: new THREE.Vector3(),
-    shakeX: 0, shakeY: 0,
-  };
-}
-
-export function updateCamera(G, dt) {
-  const p = G.player;
-  const cam = G.cameraRig;
-  const inCar = !p.onFoot && p.car;
-  const wantDist = inCar ? 11.5 : 8;
-  cam.dist = lerp(cam.dist, wantDist, Math.min(1, dt * 3));
-  const height = inCar ? 4.4 : 3.4;
-  const tx = p.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * cam.dist;
-  const tz = p.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * cam.dist;
-  const ty = (p.y || 0) + height + Math.sin(cam.pitch) * cam.dist * 0.6;
-  // keep the camera out of buildings and above the ground
-  const pos = { x: tx, z: tz };
-  collideCircle(G, pos, 0.8);
-  const target = new THREE.Vector3(pos.x, Math.max(ty, 1.6), pos.z);
-  const snap = G.cameraSnapped ? 1 : Math.min(1, dt * 5);
-  G.cameraSnapped = false;
-  cam.pos.lerp(target, snap);
-  // shake
-  const sh = G.fx.shake;
-  const shX = (Math.random() - 0.5) * sh * 0.5;
-  const shY = (Math.random() - 0.5) * sh * 0.5;
-  G.camera.position.set(cam.pos.x + shX, cam.pos.y + shY, cam.pos.z);
-  const lookTarget = new THREE.Vector3(p.x, (p.y || 0) + (inCar ? 1.6 : 1.5), p.z);
-  cam.look.lerp(lookTarget, Math.min(1, dt * 10));
-  G.camera.lookAt(cam.look);
-  void TAU;
 }

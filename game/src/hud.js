@@ -1,254 +1,269 @@
-// HUD: stars, money, clock, district, compass, objective panel, health/armor
-// bars, weapon + ammo, speedometer, hints, notifications, story dialogs, and
-// the rotating circular minimap (roads pre-rendered once, blips drawn live).
+// The HUD: wanted stars, health, money, weapon, clock, speed, objective,
+// rotating circular minimap, notifications, banners and every overlay screen.
+import { CFG, MISSIONS, S, fmtMoney, fmtClock, clamp } from './config.js';
+import { isReloading } from './combat.js';
 
-import { CITY_HALF, ROAD_COORDS, ROAD_HALF, BEACH_Z, WATER_Z, WEAPONS, fmtMoney, fmtClock, districtAt, headingToCompass, clamp, distXZ, TAU } from './config.js';
+let els = {};
+let mapStatic = null;
+let notifTimer = null;
+let bannerTimer = null;
+let callbacks = {};
 
-export function createHud(G) {
-  const $ = (id) => document.getElementById(id);
-  const el = {
-    hud: $('hud'), stars: $('stars'), money: $('money'), clock: $('clock'), district: $('district'),
-    compass: $('compass'), objective: $('objective'), objTitle: document.querySelector('#objective .obj-title'),
-    objText: document.querySelector('#objective .obj-text'), objDist: document.querySelector('#objective .obj-dist'),
-    healthFill: $('health-fill'), armorFill: $('armor-fill'), weaponBox: $('weapon-box'),
-    speedo: $('speedo'), speedNum: $('speed-num'), carName: $('car-name'),
-    crosshair: $('crosshair'), hint: $('hint'), notifyStack: $('notify-stack'),
-    dialog: $('dialog'), dlgName: document.querySelector('#dialog .dlg-name'),
-    dlgText: document.querySelector('#dialog .dlg-text'),
-    wantedFlash: $('wanted-flash'), minimap: $('minimap'),
-  };
-  const mm = el.minimap.getContext('2d');
-  const MM = 220; // minimap canvas size
-  const RANGE = 130; // world units shown across the minimap diameter
+function $(id) { return document.getElementById(id); }
 
-  // Pre-render the static road map once (offscreen), then blit + rotate.
-  const base = document.createElement('canvas');
-  base.width = MM; base.height = MM;
-  {
-    const g = base.getContext('2d');
-    const s = MM / (CITY_HALF * 2 + 40);
-    const toPx = (v) => (v + CITY_HALF + 20) * s;
-    g.fillStyle = '#1d2b22';
-    g.fillRect(0, 0, MM, MM);
-    // sea + sand at the south edge
-    g.fillStyle = '#e8d29a';
-    g.fillRect(0, toPx(BEACH_Z), MM, toPx(WATER_Z) - toPx(BEACH_Z));
-    g.fillStyle = '#1e6f9e';
-    g.fillRect(0, toPx(WATER_Z), MM, MM - toPx(WATER_Z));
-    // blocks
-    g.fillStyle = '#2c3644';
-    for (let i = 0; i < ROAD_COORDS.length - 1; i++) {
-      for (let j = 0; j < ROAD_COORDS.length - 1; j++) {
-        const x0 = ROAD_COORDS[i] + ROAD_HALF + 2;
-        const x1 = ROAD_COORDS[i + 1] - ROAD_HALF - 2;
-        const z0 = ROAD_COORDS[j] + ROAD_HALF + 2;
-        const z1 = ROAD_COORDS[j + 1] - ROAD_HALF - 2;
-        if (z0 > BEACH_Z) continue;
-        g.fillRect(toPx(x0), toPx(z0), toPx(x1) - toPx(x0), toPx(z1) - toPx(z0));
-      }
-    }
-    // roads
-    g.strokeStyle = '#565d68';
-    g.lineWidth = ROAD_HALF * 2 * s;
-    for (const c of ROAD_COORDS) {
-      g.beginPath(); g.moveTo(toPx(c), 0); g.lineTo(toPx(c), MM); g.stroke();
-      g.beginPath(); g.moveTo(0, toPx(c)); g.lineTo(MM, toPx(c)); g.stroke();
+function buildStaticMap() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const span = CFG.CITY_R * 2 + 120;
+  const px = (v) => ((v + span / 2) / span) * 512;
+  // Ground.
+  g.fillStyle = '#6f7d5a';
+  g.fillRect(0, 0, 512, 512);
+  // Ocean + beach (south).
+  g.fillStyle = '#1d6f8f';
+  g.fillRect(0, px(CFG.CITY_R + 40), 512, 512 - px(CFG.CITY_R + 40));
+  g.fillStyle = '#e8d29a';
+  g.fillRect(0, px(CFG.CITY_R - 6), 512, px(CFG.CITY_R + 40) - px(CFG.CITY_R - 6));
+  // City slab.
+  g.fillStyle = '#8d8578';
+  g.fillRect(px(-CFG.CITY_R - 15), px(-CFG.CITY_R - 15), px(CFG.CITY_R + 15) - px(-CFG.CITY_R - 15), px(CFG.CITY_R + 15) - px(-CFG.CITY_R - 15));
+  // Blocks.
+  g.fillStyle = '#a89a88';
+  for (let ix = -CFG.GRID; ix < CFG.GRID; ix++) {
+    for (let iz = -CFG.GRID; iz < CFG.GRID; iz++) {
+      const cx = ix * CFG.PITCH + CFG.PITCH / 2;
+      const cz = iz * CFG.PITCH + CFG.PITCH / 2;
+      g.fillRect(px(cx - CFG.BLOCK / 2), px(cz - CFG.BLOCK / 2), px(cx + CFG.BLOCK / 2) - px(cx - CFG.BLOCK / 2), px(cz + CFG.BLOCK / 2) - px(cz - CFG.BLOCK / 2));
     }
   }
-
-  const H = {
-    dialogQueue: [],
-    dialogCb: null,
-    dialogActive: false,
-    hiding: false,
-    arrest01: 0,
-    notifyTimers: [],
-
-    show() { el.hud.classList.remove('hidden'); },
-    hide() { el.hud.classList.add('hidden'); },
-
-    updateStars() {
-      let html = '';
-      for (let i = 0; i < 5; i++) html += `<span class="${i < G.wanted ? '' : 'off'}">★</span>`;
-      el.stars.innerHTML = html;
-    },
-    flashWanted() {
-      el.wantedFlash.classList.add('hot');
-      setTimeout(() => el.wantedFlash.classList.remove('hot'), 450);
-    },
-    flashDamage() {
-      el.wantedFlash.classList.add('hot');
-      setTimeout(() => el.wantedFlash.classList.remove('hot'), 220);
-    },
-    setHiding(v) { this.hiding = v; },
-    setArrestWarning(v) { this.arrest01 = v; },
-
-    setHint(html) {
-      if (!html) { el.hint.classList.add('hidden'); return; }
-      el.hint.innerHTML = html;
-      el.hint.classList.remove('hidden');
-    },
-
-    notify(text, kind = '') {
-      const div = document.createElement('div');
-      div.className = 'notify' + (kind ? ' ' + kind : '');
-      div.textContent = text;
-      el.notifyStack.appendChild(div);
-      while (el.notifyStack.children.length > 3) el.notifyStack.removeChild(el.notifyStack.firstChild);
-      setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, 4200);
-    },
-
-    showMissionTitle(title) {
-      this.notify(`— ${title} —`, '');
-    },
-
-    showDialog(lines, onDone) {
-      this.dialogQueue = [...lines];
-      this.dialogCb = onDone || null;
-      this.dialogActive = true;
-      this.advanceDialog(true);
-      el.dialog.classList.remove('hidden');
-    },
-    advanceDialog(first = false) {
-      if (!this.dialogActive) return;
-      if (!first) G.audio.click();
-      const line = this.dialogQueue.shift();
-      if (!line) {
-        this.dialogActive = false;
-        el.dialog.classList.add('hidden');
-        const cb = this.dialogCb;
-        this.dialogCb = null;
-        if (cb) cb();
-        return;
-      }
-      el.dlgName.textContent = line[0];
-      el.dlgText.textContent = line[1];
-    },
-
-    update(dt) {
-      const p = G.player;
-      el.money.textContent = fmtMoney(p.money);
-      el.clock.textContent = fmtClock(G.hour);
-      el.district.textContent = districtAt(p.x, p.z) + (this.hiding ? ' · HIDING…' : '');
-      const comp = headingToCompass(G.cameraRig.yaw);
-      el.compass.innerHTML = `&lt; <b>${comp}</b> &gt;`;
-      el.healthFill.style.width = `${clamp(p.health, 0, 100)}%`;
-      el.armorFill.style.width = `${clamp(p.armor, 0, 100)}%`;
-      const w = WEAPONS[p.weapon];
-      const reloading = p.reloading ? ' — RELOADING' : '';
-      el.weaponBox.innerHTML = `${w.name} &nbsp;<span class="ammo">${p.ammoInMag} / ${p.reserve[p.weapon]}</span>${reloading}`;
-      // objective
-      const obj = G.modules.missions.missionObjective(G);
-      if (obj) {
-        el.objective.classList.remove('hidden');
-        el.objTitle.textContent = obj.title;
-        el.objText.textContent = obj.text;
-        if (obj.dist && obj.x !== undefined) {
-          const d = Math.round(distXZ(p.x, p.z, obj.x, obj.z));
-          el.objDist.textContent = `${d}m away`;
-        } else el.objDist.textContent = '';
-      } else el.objective.classList.add('hidden');
-      // speedometer
-      if (!p.onFoot && p.car) {
-        el.speedo.classList.remove('hidden');
-        el.speedNum.textContent = String(Math.round(Math.abs(p.car.speed) * 3.6));
-        el.carName.textContent = p.car.name;
-      } else el.speedo.classList.add('hidden');
-      // crosshair when aiming or firing on foot / driving
-      const aiming = G.input.rightDown || G.input.mouseDown;
-      el.crosshair.classList.toggle('hidden', !aiming);
-      // arrest warning vignette
-      if (this.arrest01 > 0) {
-        el.wantedFlash.classList.add('hot');
-        this.setHint('<b>RUN!</b> The cops are grabbing you…');
-      }
-      this.drawMinimap();
-    },
-
-    drawMinimap() {
-      const p = G.player;
-      const heading = G.cameraRig.yaw;
-      mm.save();
-      mm.clearRect(0, 0, MM, MM);
-      // circular clip
-      mm.beginPath();
-      mm.arc(MM / 2, MM / 2, MM / 2 - 1, 0, TAU);
-      mm.clip();
-      mm.fillStyle = '#101623';
-      mm.fillRect(0, 0, MM, MM);
-      // rotate the world so the player's heading is up
-      mm.translate(MM / 2, MM / 2);
-      mm.rotate(heading);
-      const scale = MM / RANGE;
-      const worldToMap = (x, z) => [ (x - p.x) * scale, (z - p.z) * scale ];
-      // blit the static base map, scaled and aligned so world (p.x, p.z) lands at the centre
-      const baseScale = (CITY_HALF * 2 + 40) / RANGE;
-      const bw = MM * baseScale;
-      mm.drawImage(base, -bw / 2 - p.x * scale, -bw / 2 - p.z * scale, bw, bw);
-      // mission marker / start
-      const obj = G.modules.missions.missionObjective(G);
-      if (obj && obj.x !== undefined) {
-        const [mx, mz] = worldToMap(obj.x, obj.z);
-        mm.fillStyle = '#ffd23e';
-        mm.beginPath();
-        mm.arc(mx, mz, 7, 0, TAU);
-        mm.fill();
-        mm.strokeStyle = '#111';
-        mm.lineWidth = 2;
-        mm.stroke();
-      }
-      // cars (white dots), cops (flashing blue/red), enemies (red)
-      for (const car of G.cars) {
-        if (car.dead) continue;
-        const d = distXZ(car.x, car.z, p.x, p.z);
-        if (d > RANGE * 0.6) continue;
-        const [mx, mz] = worldToMap(car.x, car.z);
-        if (car.driver === 'police') {
-          mm.fillStyle = Math.floor(G.elapsed * 5) % 2 === 0 ? '#3a6bff' : '#ff3a3a';
-          mm.beginPath(); mm.arc(mx, mz, 5, 0, TAU); mm.fill();
-        } else if (car === p.car) continue;
-        else {
-          mm.fillStyle = 'rgba(255,255,255,0.75)';
-          mm.fillRect(mx - 2, mz - 2, 4, 4);
-        }
-      }
-      for (const cop of G.cops) {
-        if (cop.kind !== 'foot') continue;
-        const d = distXZ(cop.x, cop.z, p.x, p.z);
-        if (d > RANGE * 0.6) continue;
-        const [mx, mz] = worldToMap(cop.x, cop.z);
-        mm.fillStyle = '#3a6bff';
-        mm.beginPath(); mm.arc(mx, mz, 4, 0, TAU); mm.fill();
-      }
-      for (const e of G.enemies) {
-        if (e.dead) continue;
-        const [mx, mz] = worldToMap(e.x, e.z);
-        mm.fillStyle = '#ff3a3a';
-        mm.beginPath(); mm.arc(mx, mz, 4.5, 0, TAU); mm.fill();
-      }
-      // player arrow (centre, pointing up = heading)
-      mm.fillStyle = '#fff';
-      mm.strokeStyle = '#111';
-      mm.lineWidth = 2;
-      mm.beginPath();
-      mm.moveTo(0, -9);
-      mm.lineTo(6, 7);
-      mm.lineTo(-6, 7);
-      mm.closePath();
-      mm.fill();
-      mm.stroke();
-      mm.restore();
-      // north tick on the rim
-      mm.save();
-      mm.translate(MM / 2, MM / 2);
-      mm.rotate(heading);
-      mm.fillStyle = '#ffd23e';
-      mm.font = 'bold 13px sans-serif';
-      mm.textAlign = 'center';
-      mm.fillText('N', 0, -MM / 2 + 16);
-      mm.restore();
-    },
-  };
-  G.hud = H;
-  return H;
+  // Harbor (east).
+  g.fillStyle = '#7d8c99';
+  g.fillRect(px(140), px(-CFG.CITY_R), px(CFG.CITY_R) - px(140), px(CFG.CITY_R) - px(-CFG.CITY_R));
+  // Roads.
+  g.strokeStyle = '#2e3138';
+  g.lineWidth = 7;
+  for (let i = -CFG.GRID; i <= CFG.GRID; i++) {
+    const c = i * CFG.PITCH;
+    g.beginPath(); g.moveTo(px(-CFG.CITY_R - 15), px(c)); g.lineTo(px(CFG.CITY_R + 15), px(c)); g.stroke();
+    g.beginPath(); g.moveTo(px(c), px(-CFG.CITY_R - 15)); g.lineTo(px(c), px(CFG.CITY_R + 15)); g.stroke();
+  }
+  // Plaza.
+  g.fillStyle = '#b8b0a0';
+  g.beginPath(); g.arc(px(0), px(0), 9, 0, Math.PI * 2); g.fill();
+  mapStatic = c;
 }
+
+export const HUD = {
+  init(cb) {
+    callbacks = cb;
+    els = {
+      money: $('hud-money'), healthFill: $('health-fill'), healthText: $('health-text'),
+      stars: $('hud-stars'), weapon: $('hud-weapon'), ammo: $('hud-ammo'),
+      clock: $('hud-clock'), speed: $('hud-speed'), objective: $('hud-objective'),
+      objTitle: $('obj-title'), objText: $('obj-text'), objDist: $('obj-dist'),
+      prompt: $('hud-prompt'), crosshair: $('crosshair'), minimap: $('minimap'),
+      notif: $('hud-notif'), banner: $('banner'), bannerTitle: $('banner-title'),
+      bannerText: $('banner-text'), vignette: $('hurt-vignette'),
+      startScreen: $('start-screen'), pauseScreen: $('pause-screen'),
+      overScreen: $('over-screen'), overTitle: $('over-title'), overText: $('over-text'),
+      completeScreen: $('complete-screen'),
+      btnStart: $('btn-start'), btnContinue: $('btn-continue'),
+      btnResume: $('btn-resume'), btnSave: $('btn-save'), btnRestart: $('btn-restart'),
+      btnRetry: $('btn-retry'), btnFree: $('btn-free'), btnKeepPlaying: $('btn-keep-playing'),
+      btnMute: $('btn-mute'), saveMsg: $('save-msg'),
+    };
+    buildStaticMap();
+    els.btnStart?.addEventListener('click', () => callbacks.onStart?.(false));
+    els.btnContinue?.addEventListener('click', () => callbacks.onStart?.(true));
+    els.btnResume?.addEventListener('click', () => callbacks.onResume?.());
+    els.btnSave?.addEventListener('click', () => { if (callbacks.onSave?.()) { els.saveMsg.textContent = 'Game saved.'; setTimeout(() => { els.saveMsg.textContent = ''; }, 2500); } });
+    els.btnRestart?.addEventListener('click', () => callbacks.onRestart?.());
+    els.btnRetry?.addEventListener('click', () => callbacks.onRetry?.());
+    els.btnFree?.addEventListener('click', () => callbacks.onFreeRoam?.());
+    els.btnKeepPlaying?.addEventListener('click', () => callbacks.onKeepPlaying?.());
+    els.btnMute?.addEventListener('click', () => callbacks.onMute?.());
+  },
+
+  showStart(hasSave) {
+    els.startScreen.classList.remove('hidden');
+    if (els.btnContinue) els.btnContinue.style.display = hasSave ? '' : 'none';
+  },
+  hideStart() { els.startScreen.classList.add('hidden'); },
+  showPause() { els.pauseScreen.classList.remove('hidden'); },
+  hidePause() { els.pauseScreen.classList.add('hidden'); },
+  showOver(kind) {
+    els.overTitle.textContent = kind === 'busted' ? 'BUSTED' : 'WASTED';
+    els.overTitle.style.color = kind === 'busted' ? '#5aa2ff' : '#ff4d4d';
+    els.overText.textContent = kind === 'busted'
+      ? 'The Solmar Bay PD caught up with Rio. The crew posted bail — but the mission is blown.'
+      : 'Rio went down in the streets of Solmar Bay. The crew patched him up — but the mission is blown.';
+    els.overScreen.classList.remove('hidden');
+  },
+  hideOver() { els.overScreen.classList.add('hidden'); },
+  showStoryComplete() {
+    els.completeScreen.classList.remove('hidden');
+  },
+  hideComplete() { els.completeScreen.classList.add('hidden'); },
+
+  notify(text, color = '#ffffff') {
+    const div = document.createElement('div');
+    div.className = 'notif';
+    div.style.borderLeftColor = color;
+    div.textContent = text;
+    els.notif.appendChild(div);
+    while (els.notif.children.length > 3) els.notif.removeChild(els.notif.firstChild);
+    setTimeout(() => { div.classList.add('fade'); setTimeout(() => div.remove(), 600); }, 4200);
+  },
+
+  banner(title, text, ms = 5000) {
+    els.bannerTitle.textContent = title;
+    els.bannerText.textContent = text;
+    els.banner.classList.remove('hidden');
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => els.banner.classList.add('hidden'), ms);
+  },
+
+  setPrompt(text) {
+    if (!text) { els.prompt.classList.add('hidden'); return; }
+    els.prompt.textContent = text;
+    els.prompt.classList.remove('hidden');
+  },
+
+  update(dt) {
+    const p = S.player;
+    if (!p) return;
+    els.money.textContent = fmtMoney(p.money);
+    const hp = Math.max(0, Math.round(p.health));
+    els.healthFill.style.width = hp + '%';
+    els.healthFill.style.background = hp > 50 ? '#2ecc71' : hp > 25 ? '#f1c40f' : '#e74c3c';
+    els.healthText.textContent = hp;
+    // Wanted stars.
+    let stars = '';
+    for (let i = 0; i < CFG.WANTED_MAX; i++) stars += i < S.wanted ? '★' : '☆';
+    els.stars.textContent = stars;
+    els.stars.style.color = S.wanted >= 4 ? '#ff4d4d' : S.wanted > 0 ? '#ffd23f' : '#888888';
+    els.stars.classList.toggle('flash', S.wanted >= 4);
+    // Weapon.
+    const wName = p.weapon === 'smg' ? 'SMG' : 'PISTOL';
+    const ammo = p.ammo[p.weapon];
+    els.weapon.textContent = wName;
+    els.ammo.textContent = isReloading() ? 'RELOADING…' : ammo.mag + ' / ' + ammo.res;
+    els.clock.textContent = fmtClock(S.timeHours);
+    if (!p.onFoot && p.car) {
+      els.speed.textContent = Math.round(Math.abs(p.car.speed) * 3.6) + ' km/h';
+      els.speed.classList.remove('hidden');
+    } else els.speed.classList.add('hidden');
+    // Objective.
+    if (S.mission) {
+      const step = S.mission.def.steps[S.mission.step];
+      els.objTitle.textContent = S.mission.def.title.toUpperCase();
+      let label = step ? step.label : '';
+      if (step && step.kind === 'kill') label += ' (' + (S.mission.killsLeft ?? step.count) + ' left)';
+      els.objText.textContent = label;
+      if (step && step.x !== undefined) {
+        const d = Math.round(Math.hypot(p.mesh.position.x - step.x, p.mesh.position.z - step.z));
+        els.objDist.textContent = d + ' m';
+      } else els.objDist.textContent = '';
+      els.objective.classList.remove('hidden');
+    } else if (S.storyDone) {
+      els.objTitle.textContent = 'FREE ROAM';
+      els.objText.textContent = 'Solmar Bay is yours. Explore, steal, survive.';
+      els.objDist.textContent = '';
+      els.objective.classList.remove('hidden');
+    } else {
+      els.objective.classList.add('hidden');
+    }
+    // Hurt vignette.
+    els.vignette.style.opacity = String(clamp(p.hurtFlash, 0, 1) * 0.75 + (p.health < 30 ? 0.25 : 0));
+    this.drawMinimap();
+  },
+
+  drawMinimap() {
+    const cv = els.minimap;
+    if (!cv) return;
+    const g = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+    const p = S.player;
+    if (!p) return;
+    const px = p.mesh.position.x, pz = p.mesh.position.z;
+    const heading = p.onFoot ? p.heading : (p.car ? p.car.heading : p.heading);
+    g.clearRect(0, 0, W, H);
+    // Rotating map: the player stays up, the world turns under them.
+    g.save();
+    g.beginPath();
+    g.arc(W / 2, H / 2, W / 2 - 2, 0, Math.PI * 2);
+    g.clip();
+    g.fillStyle = '#20242a';
+    g.fillRect(0, 0, W, H);
+    g.translate(W / 2, H / 2);
+    g.rotate(heading - Math.PI); // player's forward ends up at the top
+    const span = CFG.CITY_R * 2 + 120;
+    const view = 230; // world units across the minimap
+    const k = W / view; // px per world unit
+    // Static map image aligned to world coords: map pixel = world * (512/span).
+    const mpp = 512 / span; // map px per world unit
+    const imgWorld = 512 / mpp; // world units the whole image covers
+    g.drawImage(mapStatic, (-span / 2 - px) * k, (-span / 2 - pz) * k, imgWorld * k, imgWorld * k);
+    // Blips (world -> rotated local).
+    const blip = (x, z, color, r = 5, ring = false) => {
+      const lx = (x - px) * k, lz = (z - pz) * k;
+      if (Math.hypot(lx, lz) > W / 2) return;
+      g.fillStyle = color;
+      g.beginPath();
+      g.arc(lx, lz, r, 0, Math.PI * 2);
+      g.fill();
+      if (ring) {
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(lx, lz, r + 2.5, 0, Math.PI * 2);
+        g.stroke();
+      }
+    };
+    // Mission target.
+    if (S.mission) {
+      const step = S.mission.def.steps[S.mission.step];
+      if (step && step.x !== undefined) {
+        const pulse = 5 + Math.sin(S.elapsed * 5) * 1.5;
+        blip(step.x, step.z, '#ffd23f', pulse, true);
+      }
+    }
+    // Mission car.
+    if (S.missionCar && !S.missionCar.dead) {
+      blip(S.missionCar.mesh.position.x, S.missionCar.mesh.position.z, '#ff9f1c', 4, true);
+    }
+    // Police.
+    const copColor = Math.floor(S.elapsed * 4) % 2 === 0 ? '#ff3b30' : '#2f7bff';
+    for (const pc of S.policeCars) blip(pc.car.mesh.position.x, pc.car.mesh.position.z, copColor, 4);
+    for (const c of S.footCops) if (!c.dead) blip(c.mesh.position.x, c.mesh.position.z, '#2f7bff', 3);
+    // Enemies.
+    for (const e of S.enemies) if (!e.dead) blip(e.mesh.position.x, e.mesh.position.z, '#ff3b30', 4);
+    g.restore();
+    // North marker (screen space: north sits opposite the heading).
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 11px sans-serif';
+    g.textAlign = 'center';
+    g.fillText('N', W / 2 - Math.sin(heading) * (W / 2 - 14), H / 2 + Math.cos(heading) * (W / 2 - 14) + 4);
+    // Player arrow (screen space, always up).
+    g.save();
+    g.translate(W / 2, H / 2);
+    g.fillStyle = '#ffffff';
+    g.strokeStyle = '#111111';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(0, -8);
+    g.lineTo(6, 6);
+    g.lineTo(-6, 6);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.restore();
+    // Ring.
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(W / 2, H / 2, W / 2 - 2, 0, Math.PI * 2);
+    g.stroke();
+  },
+};

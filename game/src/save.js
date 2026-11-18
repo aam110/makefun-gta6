@@ -1,49 +1,59 @@
-// localStorage save / load. Plain JSON, versioned, defensive against bad data.
-
-import { SAVE_KEY, START_MONEY, START_POS } from './config.js';
-
-export function defaultSave() {
-  return {
-    version: 1,
-    money: START_MONEY,
-    missionIndex: 0,
-    missionsDone: 0,
-    x: START_POS.x,
-    z: START_POS.z,
-    heading: Math.PI,
-    health: 100,
-    armor: 0,
-    wanted: 0,
-    hour: 17.5,
-    jacket: '#18b7a6',
-    smgUnlocked: false,
-    smgReserve: 0,
-    savedAt: Date.now(),
-  };
-}
+// Save / load through localStorage. Stores money, story progress, the
+// player's spot, health, weapon and time of day — nothing else leaves the machine.
+import { CFG, S } from './config.js';
 
 export function hasSave() {
-  try { return localStorage.getItem(SAVE_KEY) !== null; } catch { return false; }
+  try { return !!localStorage.getItem(CFG.SAVE_KEY); } catch { return false; }
 }
 
-export function loadSave() {
+export function saveGame() {
+  if (!S.player) return false;
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data || typeof data !== 'object' || data.version !== 1) return null;
-    return { ...defaultSave(), ...data };
-  } catch { return null; }
-}
-
-export function writeSave(state) {
-  try {
-    const data = { ...defaultSave(), ...state, version: 1, savedAt: Date.now() };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    const p = S.player;
+    const data = {
+      v: 1,
+      money: p.money,
+      health: p.health,
+      missionIndex: S.missionIndex,
+      storyDone: S.storyDone,
+      timeHours: S.timeHours,
+      x: p.mesh.position.x,
+      z: p.mesh.position.z,
+      heading: p.heading,
+      weapon: p.weapon,
+      ammo: p.ammo,
+      stats: S.stats,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(CFG.SAVE_KEY, JSON.stringify(data));
     return true;
   } catch { return false; }
 }
 
+export function loadGame() {
+  try {
+    const raw = localStorage.getItem(CFG.SAVE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || d.v !== 1) return null;
+    return d;
+  } catch { return null; }
+}
+
+export function applySave(d) {
+  const p = S.player;
+  p.money = d.money ?? 0;
+  p.health = d.health ?? CFG.PLAYER_HEALTH;
+  S.missionIndex = d.missionIndex ?? 0;
+  S.storyDone = !!d.storyDone;
+  S.timeHours = d.timeHours ?? CFG.START_HOUR;
+  p.mesh.position.set(d.x ?? 0, 0, d.z ?? 0);
+  p.heading = d.heading ?? 0;
+  p.weapon = d.weapon ?? 'pistol';
+  p.ammo = d.ammo ?? { pistol: { mag: 12, res: 96 }, smg: { mag: 30, res: 120 } };
+  Object.assign(S.stats, d.stats ?? {});
+}
+
 export function clearSave() {
-  try { localStorage.removeItem(SAVE_KEY); } catch {}
+  try { localStorage.removeItem(CFG.SAVE_KEY); } catch { /* noop */ }
 }

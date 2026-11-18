@@ -1,103 +1,167 @@
-// SOLMAR BAY — shared constants, palette, districts and tiny math helpers.
-// Every other module imports from here. Nothing here touches the DOM or Three.js.
+// Solmar Bay — shared configuration and mutable game state.
+// Every system imports CFG (tuning) and S (the live world) from here, so the
+// modules stay decoupled: main.js wires them together, nothing else imports main.
+import * as THREE from 'three';
 
-export const TAU = Math.PI * 2;
+export const CFG = {
+  // City layout: a 9x9 grid of roads; blocks sit between them.
+  PITCH: 54,            // road centre to road centre
+  ROAD_W: 14,           // asphalt width
+  BLOCK: 40,            // block width (PITCH - ROAD_W)
+  GRID: 4,              // roads at -4..4 * PITCH
+  CITY_R: 243,          // half-extent of the drivable city
+  LANE: 3.5,            // lane offset from a road centre line
+  // Player
+  WALK_SPEED: 7,
+  SPRINT_SPEED: 11.5,
+  PLAYER_RADIUS: 0.7,
+  PLAYER_HEALTH: 100,
+  // Cars
+  CAR_ACCEL: 16,
+  CAR_MAX_SPEED: 34,    // sport cars go faster (see CAR_TYPES)
+  CAR_REVERSE: 12,
+  CAR_TURN: 1.9,
+  CAR_RADIUS: 1.9,
+  // Wanted / police
+  WANTED_MAX: 5,
+  BUST_TIME: 1.6,
+  // World clock: one full day lasts 8 real minutes.
+  DAY_SECONDS: 480,
+  START_HOUR: 10.2,
+  // Traffic / crowd
+  TRAFFIC_COUNT: 14,
+  PED_COUNT: 26,
+  // Save
+  SAVE_KEY: 'solmar-bay-save-v1',
+};
 
-// ---- City layout (units are roughly metres) ----
-export const CITY_HALF = 180;          // playable square is [-180, 180] on x and z
-export const ROAD_SPACING = 40;
-export const ROAD_HALF = 6;            // asphalt is 12 wide
-export const SIDEWALK_HALF = 9;        // sidewalk edge
-export const LANE = 3;                 // lane offset from a road centre line
-export const ROAD_COORDS = [-160, -120, -80, -40, 0, 40, 80, 120, 160];
-export const BEACH_Z = 168;            // sand starts here (south edge)
-export const WATER_Z = 205;            // sea starts here
-export const DAY_LENGTH_MIN = 8;       // one real minute = 8 in-game minutes
-
-// ---- Player / economy ----
-export const START_MONEY = 150;
-// South of the plaza on 1st Avenue — deliberately away from Mission 1's
-// start marker (6, 26), so a new game never auto-starts the mission.
-export const START_POS = { x: 6, z: 60 };
-export const SAVE_KEY = 'solmar-bay-save-v1';
-
-// ---- Palette ----
+// Sun-soaked coastal palette.
 export const PALETTE = {
-  asphalt: 0x2b2f38,
-  sidewalk: 0x9aa0a8,
-  ground: 0x3f6b4f,
+  skyDay: new THREE.Color(0x87b5e0),
+  skyDusk: new THREE.Color(0xf2a35e),
+  skyNight: new THREE.Color(0x0b1026),
+  sunDay: new THREE.Color(0xfff2d0),
+  sunNight: new THREE.Color(0x8fa8ff),
+  asphalt: 0x2e3138,
+  sidewalk: 0x9a938a,
   sand: 0xe8d29a,
-  water: 0x1e6f9e,
-  building: [0xd8d3c8, 0xc9b8a3, 0xa8b6c4, 0x8fa3b8, 0xb8a88f, 0x9fb0a0, 0xc4a4a4, 0x7d8aa0],
-  downtown: [0x5b6b82, 0x7486a0, 0x4a5a70, 0x8fa0b5, 0x64748f, 0x3f4c63],
-  car: [0xc23b3b, 0x2e7fd9, 0xf2c230, 0x35b06a, 0xe8e8e8, 0x22242a, 0x8a4fd3, 0xef7d1a, 0x18b7a6, 0xd94f8a],
-  pedShirt: [0xe5484d, 0x2e7fd9, 0xf2a007, 0x35b06a, 0x8a4fd3, 0xef7d1a, 0x18b7a6, 0xe8e8e8, 0x5b6b82],
-  pedSkin: [0xf2c49b, 0xc98d5e, 0x8a5a3b, 0xf7d7b0, 0x6b4426],
+  ocean: 0x1d6f8f,
+  grass: 0x5d8a4a,
 };
 
-// ---- Weapons ----
+// Car archetypes: [body length, width, height, top speed, accel factor, colours]
+export const CAR_TYPES = {
+  sedan:  { len: 4.4, wid: 2.0, h: 0.85, top: 30, acc: 1.0, colors: [0xb03a2e, 0x2e6fb0, 0xd8d8d8, 0x3a3f44, 0x7fb069] },
+  taxi:   { len: 4.4, wid: 2.0, h: 0.85, top: 30, acc: 1.0, colors: [0xf2c200] },
+  sport:  { len: 4.2, wid: 2.0, h: 0.7,  top: 40, acc: 1.45, colors: [0xc21807, 0x1565c0, 0xffd600, 0x111111] },
+  van:    { len: 5.2, wid: 2.1, h: 1.5,  top: 24, acc: 0.8, colors: [0xe8e8e8, 0x607d8b, 0x8d6e63] },
+  truck:  { len: 6.4, wid: 2.3, h: 1.6,  top: 22, acc: 0.7, colors: [0x9e9e9e, 0x4e342e, 0x37474f] },
+  police: { len: 4.5, wid: 2.0, h: 0.85, top: 36, acc: 1.25, colors: [0x11151c] },
+};
+
 export const WEAPONS = {
-  pistol: { name: 'P9 Pistol', damage: 34, rate: 0.28, range: 60, spread: 0.012, mag: 12, reserveMax: 96, reload: 0.9, auto: false, tracer: 0xffe08a },
-  smg: { name: 'VK-9 SMG', damage: 18, rate: 0.09, range: 45, spread: 0.045, mag: 30, reserveMax: 180, reload: 1.4, auto: true, tracer: 0x9fd8ff },
+  pistol: { name: 'Pistol', damage: 34, rate: 0.32, mag: 12, reserve: 96, spread: 0.012, range: 90, auto: false, kick: 0.35 },
+  smg:    { name: 'SMG',    damage: 18, rate: 0.09, mag: 30, reserve: 180, spread: 0.045, range: 70, auto: true,  kick: 0.18 },
 };
 
-// ---- Wanted ----
-export const WANTED_LABEL = ['', 'Heat', 'Heat', 'Manhunt', 'Manhunt', 'Lockdown'];
-export const MAX_WANTED = 5;
+// The story: courier Rio Vale, fixer Mara, gangs Vultures vs Harbor Kings.
+export const MISSIONS = [
+  {
+    id: 'first-run', title: 'First Run', pay: 250,
+    brief: 'Mara: "Rio, a parcel waits at the downtown courier desk. Bring it to the Harbor Kings. No detours."',
+    steps: [
+      { kind: 'goto', label: 'Pick up the parcel downtown', x: 54, z: -54, radius: 6, interact: 'Take the parcel' },
+      { kind: 'goto', label: 'Deliver it to the harbor contact', x: 216, z: 27, radius: 6, interact: 'Hand over the parcel' },
+    ],
+  },
+  {
+    id: 'hot-wheels', title: 'Hot Wheels', pay: 400,
+    brief: 'Mara: "The Vultures parked a cherry-red sport car near the plaza. Steal it, bring it to the chop shop. The alarm will scream — drive fast."',
+    steps: [
+      { kind: 'steal', label: 'Steal the marked sport car', x: 59, z: 27, radius: 5 },
+      { kind: 'deliver-car', label: 'Deliver the car to the chop shop', x: -216, z: -54, radius: 8 },
+    ],
+  },
+  {
+    id: 'harbor-heat', title: 'Harbor Heat', pay: 700,
+    brief: 'Mara: "Vultures are shaking down the docks. Clear them out and grab their crate. The Kings will remember this."',
+    steps: [
+      { kind: 'goto', label: 'Reach the harbor docks', x: 216, z: 108, radius: 10 },
+      { kind: 'kill', label: 'Clear out the Vultures', x: 216, z: 108, count: 4 },
+      { kind: 'goto', label: 'Grab the crate and take it to Mara', x: 216, z: 108, radius: 5, interact: 'Grab the crate' },
+      { kind: 'goto', label: 'Bring the crate to Mara', x: -54, z: -108, radius: 6, interact: 'Deliver the crate' },
+    ],
+  },
+  {
+    id: 'heat-wave', title: 'Heat Wave', pay: 1000,
+    brief: 'Mara: "The whole bay is looking for you now. Lose the heat, then lie low at the safehouse. Do NOT get caught."',
+    steps: [
+      { kind: 'escape', label: 'Lose the police (get your wanted level to 0)' },
+      { kind: 'goto', label: 'Reach the safehouse', x: -108, z: 162, radius: 7 },
+    ],
+  },
+  {
+    id: 'bay-showdown', title: 'Bay Showdown', pay: 1500,
+    brief: 'Mara: "Kestrel himself is at the plaza with his crew. End this, Rio — and Solmar Bay is yours."',
+    steps: [
+      { kind: 'goto', label: 'Go to the plaza', x: 0, z: 0, radius: 12 },
+      { kind: 'kill', label: 'Take down Kestrel and his crew', x: 0, z: 0, count: 8, boss: true },
+    ],
+  },
+];
 
-// ---- Tiny math helpers ----
-export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+// ---- small math helpers -------------------------------------------------
+export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
-export const rand = (a = 1, b) => (b === undefined ? Math.random() * a : a + Math.random() * (b - a));
+export const rand = (a, b) => a + Math.random() * (b - a);
 export const randInt = (a, b) => Math.floor(rand(a, b + 1));
 export const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-export const chance = (p) => Math.random() < p;
+export const dist2 = (ax, az, bx, bz) => { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; };
 export function angleLerp(a, b, t) {
-  let d = (b - a) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
 }
-export function angleDiff(a, b) {
-  let d = (b - a) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
-  return d;
+export function fmtMoney(n) { return '$' + Math.floor(n).toLocaleString('en-US'); }
+export function fmtClock(hours) {
+  const h = Math.floor(hours) % 24;
+  const m = Math.floor((hours % 1) * 60);
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
-export const distXZ = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
-export function nearestRoadCoord(v) {
-  let best = ROAD_COORDS[0];
-  let bd = Infinity;
-  for (const c of ROAD_COORDS) {
-    const d = Math.abs(c - v);
-    if (d < bd) { bd = d; best = c; }
-  }
-  return best;
-}
-export function isOnRoad(x, z) {
-  for (const c of ROAD_COORDS) {
-    if (Math.abs(x - c) <= ROAD_HALF || Math.abs(z - c) <= ROAD_HALF) return true;
-  }
-  return false;
-}
-export function districtAt(x, z) {
-  if (z >= BEACH_Z) return 'Solmar Beach';
-  if (x >= 120) return 'Harbor District';
-  if (Math.abs(x) <= 80 && Math.abs(z) <= 80) return 'Downtown';
-  if (z <= -120) return 'North Hills';
-  if (x <= -120) return 'West Suburbs';
-  return 'Midtown';
-}
-export const fmtMoney = (n) => '$' + Math.floor(n).toLocaleString('en-US');
-export function fmtClock(hour) {
-  const h = Math.floor(hour) % 24;
-  const m = Math.floor((hour % 1) * 60);
-  const hh = h % 12 === 0 ? 12 : h % 12;
-  return `${hh}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
-}
-export function headingToCompass(heading) {
-  // heading is radians, 0 = -z (north). Returns e.g. "N", "NE".
-  const deg = (((-heading * 180) / Math.PI) % 360 + 360) % 360;
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  return dirs[Math.round(deg / 45) % 8];
-}
+
+// ---- live game state ----------------------------------------------------
+// main.js fills in scene/camera/renderer; systems read and mutate the rest.
+export const S = {
+  scene: null, camera: null, renderer: null,
+  started: false, paused: false, over: false, overKind: null,
+  storyDone: false,
+  timeHours: CFG.START_HOUR,
+  colliders: [],        // {minX,maxX,minZ,maxZ}
+  lamps: [],            // lamp head materials (glow at night)
+  headlightMeshes: [],  // emissive headlight cones, lit at night
+  traffic: [],          // AI cars
+  peds: [],             // pedestrians
+  policeCars: [],
+  footCops: [],
+  enemies: [],
+  pickups: [],
+  parked: [],           // stealable parked cars (incl. mission target)
+  particles: [],
+  tracers: [],
+  player: null,         // set by player.js
+  wanted: 0,
+  wantedHeat: 0,        // fractional heat; whole stars shown
+  lastSeenAt: -99,
+  elapsed: 0,
+  shake: 0,
+  missionIndex: 0,      // next mission to start (0..5); 5 = story done
+  mission: null,        // active mission runtime state
+  missionCar: null,     // the marked car for Hot Wheels
+  beacon: null,         // current objective beacon mesh
+  blips: [],            // minimap blips: {x, z, color, pulse}
+  interactTarget: null, // {label, fn} when player is near something usable
+  shotMode: null,       // ?shot= cover|drive|chase|mission
+  muted: false,
+  stats: { shots: 0, hits: 0, kills: 0, carsStolen: 0, missionsDone: 0 },
+};
