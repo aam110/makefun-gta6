@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLMAR BAY — Open World Crime</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e1a;
+    font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif; color: #fff; }
+  #scene-container { position: fixed; inset: 0; }
+  #scene-container canvas { display: block; }
+  .overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .hidden { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,.85), 0 0 2px #000; }
+  #minimap-wrap { position: absolute; top: 14px; left: 14px; width: 196px; height: 196px;
+    border: 3px solid rgba(255,255,255,.85); border-radius: 50%; overflow: hidden;
+    box-shadow: 0 0 0 4px rgba(0,0,0,.45), 0 6px 18px rgba(0,0,0,.6); background: #101623; }
+  #minimap { width: 100%; height: 100%; display: block; }
+  #minimap-north { position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #fff; }
+  #top-right { position: absolute; top: 12px; right: 16px; text-align: right; }
+  #stars { font-size: 30px; letter-spacing: 4px; color: #ffd23e; line-height: 1; }
+  #stars .off { color: rgba(255,255,255,.28); }
+  #money { font-size: 26px; color: #7dff8a; margin-top: 4px; }
+  #clock { font-size: 19px; color: #fff; }
+  #district { font-size: 13px; color: #ffd23e; text-transform: uppercase; letter-spacing: 2px; }
+  #compass { position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; letter-spacing: 6px; color: #fff; background: rgba(0,0,0,.35);
+    padding: 4px 14px; border-radius: 12px; }
+  #compass b { color: #ffd23e; }
+  #objective { position: absolute; top: 214px; left: 16px; max-width: 330px;
+    background: rgba(5,8,20,.72); border-left: 5px solid #ffd23e; padding: 10px 12px;
+    border-radius: 0 8px 8px 0; }
+  #objective .obj-title { font-size: 15px; color: #ffd23e; text-transform: uppercase; letter-spacing: 1px; }
+  #objective .obj-text { font-size: 15px; font-weight: 400; margin-top: 2px; }
+  #objective .obj-dist { font-size: 13px; color: #9fd8ff; margin-top: 2px; }
+  #vitals { position: absolute; left: 16px; bottom: 16px; width: 260px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .bar-label { font-size: 12px; width: 52px; letter-spacing: 1px; }
+  .bar { flex: 1; height: 14px; background: rgba(0,0,0,.6); border: 2px solid rgba(255,255,255,.7);
+    border-radius: 7px; overflow: hidden; }
+  .bar > div { height: 100%; transition: width .15s; }
+  #health-fill { background: linear-gradient(90deg, #37d67a, #a4f7c0); }
+  #armor-fill { background: linear-gradient(90deg, #3aa7ff, #bfe6ff); }
+  #weapon-box { margin-top: 8px; font-size: 17px; }
+  #weapon-box .ammo { color: #ffd23e; }
+  #speedo { position: absolute; right: 18px; bottom: 16px; text-align: right; }
+  #speed-num { font-size: 44px; line-height: 1; }
+  #speed-unit { font-size: 13px; color: #ffd23e; letter-spacing: 2px; }
+  #car-name { font-size: 14px; color: #cfe8ff; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px;
+    transform: translate(-50%, -50%); }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff;
+    box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 12px; top: 0; width: 2px; height: 26px; }
+  #crosshair::after { top: 12px; left: 0; height: 2px; width: 26px; }
+  #hint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+    background: rgba(0,0,0,.72); border: 1px solid rgba(255,255,255,.5); padding: 8px 16px;
+    border-radius: 20px; font-size: 16px; }
+  #hint b { color: #ffd23e; }
+  #notify-stack { position: absolute; left: 50%; top: 64px; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .notify { background: rgba(5,8,20,.8); border: 1px solid rgba(255,210,62,.8); color: #fff;
+    padding: 9px 20px; border-radius: 8px; font-size: 17px; animation: pop .25s ease-out; }
+  .notify.good { border-color: #37d67a; color: #b8ffd0; }
+  .notify.bad { border-color: #ff5252; color: #ffc4c4; }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #dialog { position: absolute; left: 50%; bottom: 130px; transform: translateX(-50%);
+    width: min(640px, 90vw); background: rgba(5,8,20,.85); border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.35); padding: 14px 18px; }
+  #dialog .dlg-name { color: #ffd23e; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; }
+  #dialog .dlg-text { font-size: 18px; font-weight: 400; margin-top: 4px; line-height: 1.4; }
+  #dialog .dlg-next { font-size: 12px; color: #9fd8ff; margin-top: 6px; text-align: right; }
+  #wanted-flash { position: absolute; inset: 0; border: 5px solid rgba(255,40,40,.0);
+    transition: border-color .2s; }
+  #wanted-flash.hot { border-color: rgba(255,40,40,.75); }
+  #vignette { position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.42) 100%); }
+
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; pointer-events: auto; }
+  #menu { background: linear-gradient(180deg, rgba(11,10,40,.25) 0%, rgba(11,10,40,.55) 55%, rgba(8,6,26,.92) 100%); }
+  #menu .kicker { font-size: 15px; letter-spacing: 8px; color: #ffd23e; text-transform: uppercase; }
+  #menu h1 { font-size: 84px; margin: 6px 0 0; line-height: .95; letter-spacing: 2px;
+    font-style: italic; color: #fff;
+    text-shadow: 0 4px 0 #ff5e3a, 0 8px 0 #7a1fa2, 0 14px 34px rgba(0,0,0,.9); }
+  #menu h1 span { color: #ffd23e; }
+  #menu .tagline { font-size: 18px; color: #dfe9ff; margin: 10px 0 26px; font-weight: 400; }
+  .menu-card { background: rgba(6,8,22,.82); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 14px; padding: 22px 30px; min-width: 430px; }
+  .btn { display: block; width: 100%; margin: 8px 0; padding: 13px 18px; font-size: 19px;
+    font-weight: 800; letter-spacing: 1px; color: #111; background: linear-gradient(180deg, #ffe066, #ffb52e);
+    border: none; border-radius: 9px; cursor: pointer; font-family: inherit; }
+  .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn.secondary { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.45); }
+  .btn:disabled { opacity: .45; cursor: default; transform: none; }
+  .color-row { display: flex; gap: 10px; justify-content: center; margin: 10px 0 4px; }
+  .swatch { width: 44px; height: 44px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; }
+  .swatch.sel { border-color: #fff; box-shadow: 0 0 0 3px #ffd23e; }
+  .controls-grid { display: grid; grid-template-columns: auto auto; gap: 4px 18px;
+    text-align: left; font-size: 14px; font-weight: 400; margin-top: 14px; color: #dfe9ff; }
+  .controls-grid b { color: #ffd23e; font-weight: 700; }
+  #pause, #end-screen { background: rgba(4,6,18,.78); }
+  #pause h2, #end-screen h2 { font-size: 52px; margin: 0 0 8px; letter-spacing: 3px; }
+  #end-screen .end-sub { font-size: 19px; color: #dfe9ff; font-weight: 400; max-width: 520px; line-height: 1.5; }
+  #end-screen .end-stats { margin: 16px 0; font-size: 17px; color: #ffd23e; }
+  .small-note { font-size: 13px; color: rgba(255,255,255,.65); font-weight: 400; margin-top: 12px; }
+  #loading { position: fixed; inset: 0; z-index: 20; background: #0b0e1a; display: flex;
+    align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+  #loading .load-title { font-size: 34px; font-weight: 800; font-style: italic; letter-spacing: 2px; }
+  #loading .load-bar { width: 240px; height: 10px; background: rgba(255,255,255,.15); border-radius: 5px; overflow: hidden; }
+  #loading .load-bar > div { height: 100%; width: 40%; background: #ffd23e; animation: load 1s infinite alternate; }
+  @keyframes load { from { width: 15%; } to { width: 85%; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="scene-container"></div>
+
+<div id="hud" class="overlay hidden">
+  <div id="vignette"></div>
+  <div id="wanted-flash"></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="220" height="220"></canvas></div>
+  <div id="top-right">
+    <div id="stars"></div>
+    <div id="money">$0</div>
+    <div id="clock">17:30</div>
+    <div id="district">Downtown</div>
+  </div>
+  <div id="compass"></div>
+  <div id="objective" class="hidden">
+    <div class="obj-title"></div><div class="obj-text"></div><div class="obj-dist"></div>
+  </div>
+  <div id="vitals">
+    <div class="bar-row"><span class="bar-label">HEALTH</span><div class="bar"><div id="health-fill"></div></div></div>
+    <div class="bar-row"><span class="bar-label">ARMOR</span><div class="bar"><div id="armor-fill"></div></div></div>
+    <div id="weapon-box"></div>
+  </div>
+  <div id="speedo" class="hidden">
+    <div id="car-name"></div><div id="speed-num">0</div><div id="speed-unit">KM/H</div>
+  </div>
+  <div id="crosshair" class="hidden"></div>
+  <div id="hint" class="hidden"></div>
+  <div id="notify-stack"></div>
+  <div id="dialog" class="hidden">
+    <div class="dlg-name"></div><div class="dlg-text"></div><div class="dlg-next">ENTER / CLICK to continue</div>
+  </div>
+</div>
+
+<div id="menu" class="screen">
+  <div class="kicker">Welcome to</div>
+  <h1>SOLMAR <span>BAY</span></h1>
+  <div class="tagline">Sunset city. Two gangs. One courier caught in the middle.<br>Drive it, steal it, survive it.</div>
+  <div class="menu-card">
+    <button id="btn-new" class="btn">NEW GAME</button>
+    <button id="btn-continue" class="btn secondary">CONTINUE</button>
+    <div style="font-size:14px; letter-spacing:2px; margin-top:12px; color:#ffd23e;">RIO'S JACKET</div>
+    <div class="color-row" id="jacket-row">
+      <div class="swatch sel" data-color="#18b7a6" style="background:#18b7a6" title="Teal"></div>
+      <div class="swatch" data-color="#e5484d" style="background:#e5484d" title="Crimson"></div>
+      <div class="swatch" data-color="#f2a007" style="background:#f2a007" title="Amber"></div>
+      <div class="swatch" data-color="#7a5cff" style="background:#7a5cff" title="Violet"></div>
+      <div class="swatch" data-color="#2f6fed" style="background:#2f6fed" title="Royal"></div>
+    </div>
+    <div class="controls-grid">
+      <span><b>W A S D</b> move / drive</span><span><b>MOUSE</b> aim &amp; camera</span>
+      <span><b>SHIFT</b> sprint / boost</span><span><b>CLICK</b> shoot / drive-by</span>
+      <span><b>F</b> enter / steal car</span><span><b>1 / 2</b> pistol / SMG</span>
+      <span><b>SPACE</b> jump / handbrake</span><span><b>R</b> reload &nbsp; <b>ESC / P</b> pause</span>
+    </div>
+    <div class="small-note">An original game. No real city, person or franchise is depicted. All audio is synthesized in your browser.</div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <h2>PAUSED</h2>
+  <div class="menu-card">
+    <button id="btn-resume" class="btn">RESUME</button>
+    <button id="btn-save" class="btn secondary">SAVE GAME</button>
+    <button id="btn-quit" class="btn secondary">QUIT TO MENU</button>
+    <div class="small-note">Progress also auto-saves after every mission.</div>
+  </div>
+</div>
+
+<div id="end-screen" class="screen hidden">
+  <h2 id="end-title">BUSTED</h2>
+  <div class="end-sub" id="end-sub"></div>
+  <div class="end-stats" id="end-stats"></div>
+  <div class="menu-card">
+    <button id="btn-retry" class="btn">GET BACK OUT THERE</button>
+    <button id="btn-end-menu" class="btn secondary">MAIN MENU</button>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="load-title">SOLMAR BAY</div>
+  <div class="load-bar"><div></div></div>
+  <div style="color:#9fb2d8; font-size:14px;">Building the city…</div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
