@@ -3,184 +3,152 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:,">
-<title>Solmar Bay — Open-World Crime</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1026;
-    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; color: #fff; }
-  #app, #app canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  .hidden { display: none !important; }
-
-  /* ---------- HUD ---------- */
-  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5;
-    text-shadow: 0 1px 3px rgba(0,0,0,.8); }
-  .panel { background: rgba(8, 12, 20, .62); border: 1px solid rgba(255,255,255,.14);
-    border-radius: 10px; backdrop-filter: blur(4px); }
-  #hud-topleft { position: absolute; top: 14px; left: 14px; padding: 10px 14px; min-width: 210px; }
-  #hud-stars { font-size: 26px; letter-spacing: 4px; line-height: 1; }
-  #hud-stars.flash { animation: starflash .5s steps(2) infinite; }
-  @keyframes starflash { 50% { opacity: .35; } }
-  #health-bar { height: 12px; background: rgba(255,255,255,.18); border-radius: 6px;
-    margin-top: 8px; overflow: hidden; }
-  #health-fill { height: 100%; width: 100%; background: #2ecc71; border-radius: 6px;
-    transition: width .25s; }
-  #health-row { display: flex; justify-content: space-between; font-size: 12px;
-    margin-top: 4px; color: #ddd; }
-  #hud-clock { font-size: 13px; color: #ffd23f; margin-top: 6px; font-weight: 700;
-    letter-spacing: 1px; }
-  #hud-topright { position: absolute; top: 14px; right: 14px; padding: 10px 16px;
-    text-align: right; }
-  #hud-money { font-size: 30px; font-weight: 800; color: #7dff9a; letter-spacing: 1px; }
-  #hud-weapon { font-size: 15px; font-weight: 700; margin-top: 2px; }
-  #hud-ammo { font-size: 13px; color: #ccc; }
-  #hud-objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-    padding: 10px 22px; text-align: center; max-width: 480px; }
-  #obj-title { font-size: 13px; font-weight: 800; color: #ffd23f; letter-spacing: 2px; }
-  #obj-text { font-size: 16px; font-weight: 600; margin-top: 2px; }
-  #obj-dist { font-size: 13px; color: #9fd8e8; margin-top: 2px; }
-  #hud-bottomleft { position: absolute; left: 14px; bottom: 14px; }
-  #minimap { width: 190px; height: 190px; border-radius: 50%;
-    box-shadow: 0 0 0 3px rgba(255,255,255,.25), 0 4px 18px rgba(0,0,0,.5); }
-  #hud-speed { position: absolute; right: 16px; bottom: 16px; font-size: 26px;
-    font-weight: 800; padding: 6px 14px; }
-  #hud-prompt { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%);
-    padding: 9px 20px; font-size: 16px; font-weight: 700; background: rgba(8,12,20,.75);
-    border: 1px solid #ffd23f; border-radius: 8px; color: #ffd23f; }
-  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
-    transform: translate(-50%, -50%); }
-  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff;
-    box-shadow: 0 0 3px #000; }
-  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
-  #crosshair::after { top: 10px; left: 0; height: 2px; width: 22px; }
-  #hud-notif { position: absolute; top: 108px; right: 14px; width: 300px;
-    display: flex; flex-direction: column; gap: 8px; }
-  .notif { background: rgba(8,12,20,.78); border-left: 4px solid #fff; border-radius: 6px;
-    padding: 9px 12px; font-size: 14px; transition: opacity .6s; }
-  .notif.fade { opacity: 0; }
-  #banner { position: absolute; left: 50%; top: 22%; transform: translateX(-50%);
-    text-align: center; max-width: 640px; padding: 18px 34px; }
-  #banner-title { font-size: 34px; font-weight: 900; letter-spacing: 3px; color: #ffd23f; }
-  #banner-text { font-size: 16px; margin-top: 6px; line-height: 1.45; color: #f0f0f0; }
-  #hurt-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0;
-    background: radial-gradient(ellipse at center, transparent 55%, rgba(200,0,0,.55) 100%); }
-
-  /* ---------- Overlays ---------- */
-  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
-    justify-content: center; background: rgba(5, 8, 16, .72); backdrop-filter: blur(3px); }
-  .card { max-width: 720px; width: min(92vw, 720px); padding: 34px 40px; text-align: center;
-    background: linear-gradient(160deg, rgba(20,28,48,.96), rgba(10,14,26,.96));
-    border: 1px solid rgba(255,210,63,.35); border-radius: 16px;
-    box-shadow: 0 20px 60px rgba(0,0,0,.6); }
-  .title { font-size: 64px; font-weight: 900; letter-spacing: 4px; line-height: .95;
-    background: linear-gradient(180deg, #ffe27a, #ff7b3d 60%, #e63c6e);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    text-shadow: none; }
-  .subtitle { font-size: 15px; letter-spacing: 6px; color: #9fd8e8; margin-top: 8px;
-    font-weight: 700; }
-  .story { font-size: 15.5px; line-height: 1.6; color: #d8d8d8; margin: 20px 0; }
-  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; text-align: left;
-    font-size: 14px; color: #ccc; margin: 0 auto 22px; max-width: 520px; }
-  .controls b { color: #ffd23f; }
-  .btn { pointer-events: auto; cursor: pointer; border: none; border-radius: 9px;
-    padding: 13px 30px; font-size: 17px; font-weight: 800; letter-spacing: 1px;
-    color: #141414; background: linear-gradient(180deg, #ffe27a, #ffb020);
-    box-shadow: 0 4px 0 #a86e00; margin: 4px; }
-  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #a86e00; }
-  .btn.secondary { background: rgba(255,255,255,.12); color: #fff;
-    box-shadow: 0 4px 0 rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.25); }
-  .big-word { font-size: 72px; font-weight: 900; letter-spacing: 6px; }
-  .over-text { font-size: 16px; color: #d8d8d8; line-height: 1.6; margin: 14px 0 22px; }
-  #save-msg { color: #7dff9a; font-size: 14px; min-height: 20px; margin-top: 8px; }
-  .foot { font-size: 12px; color: #888; margin-top: 18px; }
-  .mute-row { margin-top: 14px; font-size: 13px; color: #aaa; }
-  #btn-mute { pointer-events: auto; cursor: pointer; background: none; border: none;
-    color: #9fd8e8; font-size: 13px; text-decoration: underline; }
-</style>
+<title>Palmera Heat — Open-World Crime in Palmera City</title>
+<link rel="stylesheet" href="./css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230c1e2a'/%3E%3Ccircle cx='32' cy='26' r='13' fill='%23ffd24d'/%3E%3Crect x='10' y='42' width='44' height='6' rx='3' fill='%2338b8b0'/%3E%3C/svg%3E">
 <script type="importmap">
-{ "imports": { "three": "./vendor/three.module.min.js" } }
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js"
+  }
+}
 </script>
 </head>
 <body>
 <div id="app"></div>
 
-<div id="hud">
-  <div id="hud-topleft" class="panel">
-    <div id="hud-stars">☆☆☆☆☆</div>
-    <div id="health-bar"><div id="health-fill"></div></div>
-    <div id="health-row"><span>RIO VALE</span><span><span id="health-text">100</span> HP</span></div>
-    <div id="hud-clock">10:12</div>
-  </div>
-  <div id="hud-topright" class="panel">
-    <div id="hud-money">$0</div>
-    <div id="hud-weapon">PISTOL</div>
-    <div id="hud-ammo">12 / 96</div>
-  </div>
-  <div id="hud-objective" class="panel hidden">
-    <div id="obj-title">MISSION</div>
-    <div id="obj-text"></div>
-    <div id="obj-dist"></div>
-  </div>
-  <div id="hud-bottomleft"><canvas id="minimap" width="190" height="190"></canvas></div>
-  <div id="hud-speed" class="panel hidden">0 km/h</div>
-  <div id="hud-prompt" class="hidden"></div>
-  <div id="crosshair"></div>
-  <div id="hud-notif"></div>
-  <div id="banner" class="panel hidden"><div id="banner-title"></div><div id="banner-text"></div></div>
-</div>
-<div id="hurt-vignette"></div>
+<!-- ============ HUD ============ -->
+<div id="hud" class="hidden">
+  <div id="vignette"></div>
+  <div id="wanted-flash"></div>
 
-<div id="start-screen" class="overlay hidden">
-  <div class="card">
-    <div class="title">SOLMAR BAY</div>
-    <div class="subtitle">AN OPEN-WORLD CRIME STORY</div>
-    <p class="story">Rio Vale came to Solmar Bay to drive parcels. Fixer Mara has other plans:
-      the Vultures are squeezing the docks, the Harbor Kings want their streets back, and
-      the bay's police want Rio. Steal cars, run missions, lose the heat — and take the city.</p>
-    <div class="controls">
-      <div><b>W A S D</b> — move / drive</div>
-      <div><b>Mouse</b> — drag to look, click to shoot</div>
-      <div><b>Shift</b> — sprint</div>
-      <div><b>F</b> — steal / exit car</div>
-      <div><b>E</b> — interact</div>
-      <div><b>R</b> — reload &nbsp; <b>1 / 2</b> — weapon</div>
-      <div><b>P / Esc</b> — pause</div>
-      <div><b>M</b> — mute</div>
+  <div id="obj-panel">
+    <div id="obj-title">FREE ROAM</div>
+    <div id="obj-text">Explore Palmera City.</div>
+    <div id="obj-timer" class="hidden">0:00</div>
+  </div>
+
+  <div id="top-right">
+    <div id="stars"></div>
+    <div id="cash">$250</div>
+  </div>
+
+  <div id="bottom-left">
+    <div id="health-row">
+      <span id="health-label">HP</span>
+      <div id="health-bar"><div id="health-fill"></div></div>
+      <span id="health-text">100</span>
     </div>
-    <button id="btn-start" class="btn">▶ NEW GAME</button>
-    <button id="btn-continue" class="btn secondary">CONTINUE</button>
-    <div class="mute-row">Sound is synthesized live — no audio files. <button id="btn-mute">Mute / unmute (M)</button></div>
-    <div class="foot">An original game. No affiliation with any commercial title. Progress saves automatically.</div>
+    <div id="weapon-name">PISTOL ∞</div>
+  </div>
+
+  <div id="bottom-right">
+    <canvas id="minimap" width="190" height="190"></canvas>
+    <div id="speedo" class="hidden">
+      <span id="speed-value">0</span><span id="speed-unit">km/h</span>
+      <span id="gear">D</span>
+    </div>
+  </div>
+
+  <div id="crosshair" class="hidden"><div class="dot"></div></div>
+  <div id="prompt" class="hidden"></div>
+
+  <div id="banner" class="hidden">
+    <div id="banner-title"></div>
+    <div id="banner-sub"></div>
+  </div>
+
+  <div id="mission-card" class="hidden">
+    <div id="mission-card-title"></div>
+    <div id="mission-card-brief"></div>
+    <div id="mission-card-giver"></div>
+  </div>
+
+  <div id="subtitle" class="hidden">
+    <span id="subtitle-who"></span><span id="subtitle-text"></span>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+</div>
+
+<!-- ============ Title screen ============ -->
+<div id="title-screen">
+  <div class="title-shade"></div>
+  <div class="title-inner">
+    <div class="title-kicker">AN OPEN-WORLD CRIME STORY</div>
+    <h1 class="title-main">PALMERA<br><span>HEAT</span></h1>
+    <p class="title-tag">Sun, salt, and stolen cars. Mara Voss is back — and the Meridian Syndicate is going down.</p>
+    <div class="title-buttons">
+      <button id="btn-new" class="btn primary">NEW GAME</button>
+      <button id="btn-continue" class="btn hidden">CONTINUE</button>
+      <button id="btn-help" class="btn">HOW TO PLAY</button>
+      <button id="btn-sound" class="btn small">SOUND: ON</button>
+    </div>
+    <div id="save-info"></div>
+    <div class="title-foot">
+      <span>5 story missions</span><i>·</i>
+      <span>Open city, traffic &amp; pedestrians</span><i>·</i>
+      <span>Police wanted system</span><i>·</i>
+      <span>Save &amp; continue</span>
+    </div>
+    <div class="title-credit">A fully original game — its city, characters, story and music are invented for this entry. No assets from any commercial game.</div>
   </div>
 </div>
 
-<div id="pause-screen" class="overlay hidden">
-  <div class="card">
-    <div class="title" style="font-size:44px">PAUSED</div>
-    <p class="story">Solmar Bay waits for no one — except right now.</p>
-    <button id="btn-resume" class="btn">RESUME</button>
-    <button id="btn-save" class="btn secondary">SAVE GAME</button>
-    <button id="btn-restart" class="btn secondary">RESTART</button>
-    <div id="save-msg"></div>
-    <div class="foot">F — steal car &nbsp;·&nbsp; E — interact &nbsp;·&nbsp; R — reload &nbsp;·&nbsp; 1/2 — weapon &nbsp;·&nbsp; M — mute</div>
+<!-- ============ Pause ============ -->
+<div id="pause-screen" class="hidden">
+  <div class="panel">
+    <h2>PAUSED</h2>
+    <p class="panel-sub">Palmera waits for no one. Well — except now.</p>
+    <button id="btn-resume" class="btn primary">RESUME</button>
+    <button id="btn-save" class="btn">SAVE GAME</button>
+    <button id="btn-restart-mission" class="btn">RESTART MISSION</button>
+    <button id="btn-quit" class="btn">SAVE &amp; QUIT TO TITLE</button>
+    <p class="panel-hint">Esc / P — resume &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; E — enter car / interact</p>
   </div>
 </div>
 
-<div id="over-screen" class="overlay hidden">
-  <div class="card">
-    <div id="over-title" class="big-word">WASTED</div>
-    <p id="over-text" class="over-text"></p>
-    <button id="btn-retry" class="btn">RETRY MISSION</button>
-    <button id="btn-free" class="btn secondary">FREE ROAM</button>
+<!-- ============ How to play ============ -->
+<div id="help-screen" class="hidden">
+  <div class="panel wide">
+    <h2>HOW TO PLAY</h2>
+    <div class="controls-grid">
+      <div><b>W A S D</b><span>Move / drive</span></div>
+      <div><b>Mouse</b><span>Look around (click to lock)</span></div>
+      <div><b>← → ↑ ↓</b><span>Turn camera</span></div>
+      <div><b>Shift</b><span>Sprint</span></div>
+      <div><b>Space</b><span>Jump / handbrake</span></div>
+      <div><b>E</b><span>Steal / exit car · interact</span></div>
+      <div><b>Left click</b><span>Shoot</span></div>
+      <div><b>F</b><span>Punch</span></div>
+      <div><b>H</b><span>Horn</span></div>
+      <div><b>M</b><span>Mute sound</span></div>
+      <div><b>Esc / P</b><span>Pause</span></div>
+    </div>
+    <p class="panel-sub">Follow the golden <b>M</b> on the minimap to start the next story mission. Stealing cars, hurting people and shooting raise your wanted level — break line of sight from the police and the heat cools off. Get busted standing still next to a cop, or wasted at zero health. Your safehouse heals you and saves the game.</p>
+    <button id="btn-help-close" class="btn primary">GOT IT</button>
   </div>
 </div>
 
-<div id="complete-screen" class="overlay hidden">
-  <div class="card">
-    <div class="title" style="font-size:48px">STORY COMPLETE</div>
-    <p class="story">Kestrel is done. The Vultures are scattered, the Kings owe Rio everything,
-      and Solmar Bay is his. The streets are still open — keep driving.</p>
-    <button id="btn-keep-playing" class="btn">KEEP PLAYING</button>
+<!-- ============ Wasted / Busted / Failed ============ -->
+<div id="end-screen" class="hidden">
+  <div class="end-inner">
+    <h2 id="end-title">WASTED</h2>
+    <p id="end-sub"></p>
+    <div class="title-buttons">
+      <button id="btn-retry" class="btn primary">RETRY MISSION</button>
+      <button id="btn-freeroam" class="btn">FREE ROAM</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Story complete ============ -->
+<div id="complete-screen" class="hidden">
+  <div class="panel">
+    <h2 class="gold">PALMERA IS YOURS</h2>
+    <p class="panel-sub">Vera Castellan is finished. The Meridian Syndicate is ash. Mara Voss watches the sunset over Sunset Marina — the city she came home to save.</p>
+    <p id="complete-stats" class="panel-sub"></p>
+    <button id="btn-complete-continue" class="btn primary">KEEP EXPLORING</button>
   </div>
 </div>
 
