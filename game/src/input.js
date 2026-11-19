@@ -1,45 +1,53 @@
-// Keyboard + mouse input. Drag (or pointer lock) rotates the camera;
-// the game reads keys by code so WASD and arrows both work.
-export const Input = {
-  keys: new Set(),
-  lookDX: 0,
-  lookDY: 0,
-  mouseDown: false,
-  mouseDownEdge: false, // set true on the frame the button goes down
-  dragging: false,
-  lastX: 0,
-  lastY: 0,
-  locked: false,
+// Palmera Heat — keyboard and mouse input.
+// One object owns every key, mouse button and look delta the game reads.
+// The camera turns with pointer lock when available, and with click-drag or
+// the arrow keys otherwise, so the game stays playable without a lock.
 
-  init(canvas) {
-    window.addEventListener('keydown', (e) => {
+export class Input {
+  constructor() {
+    this.keys = new Set();
+    this.pressed = new Set();
+    this.lookDX = 0;
+    this.lookDY = 0;
+    this.mouseDown = false;
+    this.mouseClicked = false;
+    this.locked = false;
+    this.dragging = false;
+    this.lastX = 0;
+    this.lastY = 0;
+    this.enabled = true;
+    this._onKeyDown = null;
+    this._onKeyUp = null;
+  }
+
+  attach(canvas) {
+    this._onKeyDown = (e) => {
+      if (!this.enabled) return;
       if (e.code === 'Space') e.preventDefault();
+      if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
-    });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
-
-    canvas.addEventListener('mousedown', (e) => {
-      this.mouseDown = true;
-      this.mouseDownEdge = true;
-      this.dragging = true;
-      this.lastX = e.clientX;
-      this.lastY = e.clientY;
-      if (e.button === 0 && document.pointerLockElement !== canvas) {
-        canvas.requestPointerLock?.();
-      }
-    });
-    window.addEventListener('mouseup', () => {
+    };
+    this._onKeyUp = (e) => {
+      this.keys.delete(e.code);
+    };
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.pressed.clear();
       this.mouseDown = false;
       this.dragging = false;
     });
+
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
     });
-    window.addEventListener('mousemove', (e) => {
+
+    document.addEventListener('mousemove', (e) => {
+      if (!this.enabled) return;
       if (this.locked) {
-        this.lookDX += e.movementX;
-        this.lookDY += e.movementY;
+        this.lookDX += e.movementX || 0;
+        this.lookDY += e.movementY || 0;
       } else if (this.dragging) {
         this.lookDX += e.clientX - this.lastX;
         this.lookDY += e.clientY - this.lastY;
@@ -47,42 +55,62 @@ export const Input = {
         this.lastY = e.clientY;
       }
     });
-    // Touch: left half steers/moves, right half looks. Kept minimal.
-    let touchId = null;
-    canvas.addEventListener('touchstart', (e) => {
-      const t = e.changedTouches[0];
-      touchId = t.identifier;
-      this.lastX = t.clientX;
-      this.lastY = t.clientY;
-    }, { passive: true });
-    canvas.addEventListener('touchmove', (e) => {
-      for (const t of e.changedTouches) {
-        if (t.identifier === touchId) {
-          this.lookDX += (t.clientX - this.lastX) * 2;
-          this.lookDY += (t.clientY - this.lastY) * 2;
-          this.lastX = t.clientX;
-          this.lastY = t.clientY;
+
+    canvas.addEventListener('mousedown', (e) => {
+      if (!this.enabled) return;
+      if (e.button === 0) {
+        this.mouseDown = true;
+        this.mouseClicked = true;
+        this.dragging = true;
+        this.lastX = e.clientX;
+        this.lastY = e.clientY;
+        if (!this.locked) {
+          try {
+            canvas.requestPointerLock();
+          } catch (err) { /* drag fallback stays available */ }
         }
       }
-    }, { passive: true });
-    canvas.addEventListener('touchend', () => { touchId = null; });
-  },
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) {
+        this.mouseDown = false;
+        this.dragging = false;
+      }
+    });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
 
-  down(code) { return this.keys.has(code); },
-  axis() {
-    // Returns {f, s}: forward/back and strafe, -1..1.
-    let f = 0, s = 0;
-    if (this.down('KeyW') || this.down('ArrowUp')) f += 1;
-    if (this.down('KeyS') || this.down('ArrowDown')) f -= 1;
-    if (this.down('KeyD') || this.down('ArrowRight')) s += 1;
-    if (this.down('KeyA') || this.down('ArrowLeft')) s -= 1;
-    return { f, s };
-  },
+  isDown(code) {
+    return this.keys.has(code);
+  }
+
+  /** True once, on the frame the key went down. */
+  wasPressed(code) {
+    return this.pressed.has(code);
+  }
+
+  /** Look deltas since the last call, then cleared. */
   consumeLook() {
-    const dx = this.lookDX, dy = this.lookDY;
+    const dx = this.lookDX;
+    const dy = this.lookDY;
     this.lookDX = 0;
     this.lookDY = 0;
     return { dx, dy };
-  },
-  endFrame() { this.mouseDownEdge = false; },
-};
+  }
+
+  consumeClick() {
+    const c = this.mouseClicked;
+    this.mouseClicked = false;
+    return c;
+  }
+
+  /** End-of-frame housekeeping: edge-triggered state lives one frame. */
+  endFrame() {
+    this.pressed.clear();
+    this.mouseClicked = false;
+  }
+
+  releasePointerLock() {
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+}

@@ -1,117 +1,154 @@
-// Juice: particles, tracers, muzzle flashes, objective beacons and camera shake.
+// Palmera Heat — particles and flashes.
+// One pooled set of small billboards serves every burst: explosions, hit
+// sparks, tyre smoke, muzzle flashes. A pooled point light gives explosions
+// their punch without adding a light per blast.
+
 import * as THREE from 'three';
-import { S, rand, pick } from './config.js';
 
-const geo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+const MAX_PARTICLES = 260;
 
-export function burst(x, y, z, color, n = 12, speed = 6, life = 0.7, gravity = -9) {
-  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
-  for (let i = 0; i < n; i++) {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    S.scene.add(m);
-    S.particles.push({
-      mesh: m, mat,
-      vx: rand(-speed, speed), vy: rand(1, speed), vz: rand(-speed, speed),
-      life: rand(life * 0.5, life), maxLife: life, gravity,
+export class Effects {
+  constructor(scene) {
+    this.scene = scene;
+    this.pool = [];
+    const geo = new THREE.PlaneGeometry(0.5, 0.5);
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      scene.add(mesh);
+      this.pool.push({
+        mesh, life: 0, maxLife: 1, vx: 0, vy: 0, vz: 0,
+        gravity: 0, grow: 0, size: 1, fade: true,
+      });
+    }
+    this.flash = new THREE.PointLight(0xffa040, 0, 40, 1.6);
+    this.scene.add(this.flash);
+    this.flashLife = 0;
+  }
+
+  _spawn(x, y, z, opts) {
+    const p = this.pool.find((q) => q.life <= 0);
+    if (!p) return;
+    p.mesh.visible = true;
+    p.mesh.position.set(x, y, z);
+    p.mesh.material.color.setHex(opts.color);
+    p.mesh.material.opacity = opts.opacity ?? 0.95;
+    p.mesh.scale.setScalar(opts.size ?? 1);
+    p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    p.vx = opts.vx ?? 0;
+    p.vy = opts.vy ?? 0;
+    p.vz = opts.vz ?? 0;
+    p.gravity = opts.gravity ?? 0;
+    p.grow = opts.grow ?? 0;
+    p.size = opts.size ?? 1;
+    p.maxLife = opts.life ?? 0.8;
+    p.life = p.maxLife;
+    p.fade = opts.fade !== false;
+  }
+
+  burst(x, y, z, color, count, speed, life = 0.7, size = 1) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const up = Math.random() * 0.9 + 0.1;
+      const s = speed * (0.4 + Math.random() * 0.8);
+      this._spawn(x, y, z, {
+        color,
+        vx: Math.sin(a) * s,
+        vy: up * s,
+        vz: Math.cos(a) * s,
+        gravity: -9,
+        life: life * (0.6 + Math.random() * 0.7),
+        size: size * (0.6 + Math.random() * 0.8),
+      });
+    }
+  }
+
+  sparks(x, y, z) {
+    this.burst(x, y, z, 0xffd24d, 10, 7, 0.45, 0.5);
+  }
+
+  hitPuff(x, y, z) {
+    this.burst(x, y, z, 0xc23b2e, 8, 3.5, 0.5, 0.7);
+  }
+
+  smoke(x, y, z) {
+    this._spawn(x + (Math.random() - 0.5) * 0.6, y, z + (Math.random() - 0.5) * 0.6, {
+      color: 0x555555,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: 1.6 + Math.random(),
+      vz: (Math.random() - 0.5) * 0.6,
+      gravity: 1.2,
+      grow: 1.8,
+      life: 1.4,
+      size: 0.8,
+      opacity: 0.5,
     });
   }
-}
 
-export function smokePuff(x, y, z) {
-  burst(x, y, z, 0x666666, 5, 2.5, 1.2, 2.5);
-}
+  tyreSmoke(x, y, z) {
+    this._spawn(x, y + 0.2, z, {
+      color: 0xcccccc,
+      vx: (Math.random() - 0.5) * 1.2,
+      vy: 0.8,
+      vz: (Math.random() - 0.5) * 1.2,
+      grow: 1.4,
+      life: 0.8,
+      size: 0.7,
+      opacity: 0.55,
+    });
+  }
 
-export function muzzleFlash(x, y, z) {
-  burst(x, y, z, 0xffd23f, 5, 3, 0.12, 0);
-  burst(x, y, z, 0xff7b00, 3, 2, 0.1, 0);
-}
+  explosion(x, y, z) {
+    this.burst(x, y + 0.5, z, 0xff7b1c, 26, 9, 0.9, 1.6);
+    this.burst(x, y + 0.5, z, 0xffd24d, 16, 6, 0.6, 1.2);
+    this.burst(x, y + 0.5, z, 0x333333, 14, 4, 1.6, 2.2);
+    this.flash.position.set(x, y + 2, z);
+    this.flash.intensity = 90;
+    this.flashLife = 0.35;
+  }
 
-export function tracer(from, to, color = 0xffe08a) {
-  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
-  const g = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()]);
-  const line = new THREE.Line(g, mat);
-  S.scene.add(line);
-  S.tracers.push({ line, mat, life: 0.09 });
-}
+  muzzle(x, y, z, heading) {
+    const fx = x + Math.sin(heading) * 0.8;
+    const fz = z + Math.cos(heading) * 0.8;
+    this._spawn(fx, y, fz, {
+      color: 0xffe27a, life: 0.07, size: 0.9, opacity: 1, fade: true,
+    });
+    this.flash.position.set(fx, y, fz);
+    this.flash.intensity = Math.max(this.flash.intensity, 12);
+    this.flashLife = Math.max(this.flashLife, 0.06);
+  }
 
-export function shake(amount) {
-  S.shake = Math.min(1.2, S.shake + amount);
-}
-
-export function updateEffects(dt) {
-  for (let i = S.particles.length - 1; i >= 0; i--) {
-    const p = S.particles[i];
-    p.life -= dt;
-    if (p.life <= 0) {
-      S.scene.remove(p.mesh);
-      S.particles.splice(i, 1);
-      continue;
+  update(dt, camera) {
+    for (const p of this.pool) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.mesh.visible = false;
+        continue;
+      }
+      p.vy += p.gravity * dt;
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.position.z += p.vz * dt;
+      if (p.mesh.position.y < 0.1 && p.gravity < 0) {
+        p.mesh.position.y = 0.1;
+        p.vy *= -0.3;
+      }
+      const k = p.life / p.maxLife;
+      if (p.fade) p.mesh.material.opacity = 0.95 * k;
+      if (p.grow) p.mesh.scale.setScalar(p.size + p.grow * (1 - k));
+      p.mesh.lookAt(camera.position);
     }
-    p.vy += p.gravity * dt;
-    p.mesh.position.x += p.vx * dt;
-    p.mesh.position.y += p.vy * dt;
-    p.mesh.position.z += p.vz * dt;
-    if (p.mesh.position.y < 0.1) { p.mesh.position.y = 0.1; p.vy *= -0.4; }
-    p.mat.opacity = Math.max(0, p.life / p.maxLife);
-    p.mesh.rotation.x += dt * 6;
-    p.mesh.rotation.y += dt * 5;
-  }
-  for (let i = S.tracers.length - 1; i >= 0; i--) {
-    const t = S.tracers[i];
-    t.life -= dt;
-    if (t.life <= 0) {
-      S.scene.remove(t.line);
-      t.line.geometry.dispose();
-      t.mat.dispose();
-      S.tracers.splice(i, 1);
+    if (this.flashLife > 0) {
+      this.flashLife -= dt;
+      if (this.flashLife <= 0) this.flash.intensity = 0;
     }
   }
-  S.shake = Math.max(0, S.shake - dt * 2.2);
 }
-
-// A tall golden light pillar + spinning diamond marking the objective.
-export function makeBeacon(x, z, color = 0xffd23f) {
-  const g = new THREE.Group();
-  const pillar = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.1, 1.5, 60, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  pillar.position.y = 30;
-  const diamond = new THREE.Mesh(
-    new THREE.OctahedronGeometry(1.1),
-    new THREE.MeshBasicMaterial({ color }),
-  );
-  diamond.position.y = 5.5;
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(2.2, 3, 24),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.15;
-  g.add(pillar, diamond, ring);
-  g.position.set(x, 0, z);
-  g.userData.diamond = diamond;
-  g.userData.ring = ring;
-  S.scene.add(g);
-  return g;
-}
-
-export function updateBeacon(dt) {
-  const b = S.beacon;
-  if (!b) return;
-  b.userData.diamond.rotation.y += dt * 2.4;
-  b.userData.diamond.position.y = 5.5 + Math.sin(S.elapsed * 2) * 0.6;
-  const s = 1 + Math.sin(S.elapsed * 3) * 0.08;
-  b.userData.ring.scale.set(s, s, 1);
-}
-
-export function removeBeacon() {
-  if (S.beacon) {
-    S.scene.remove(S.beacon);
-    S.beacon = null;
-  }
-}
-
-export const BLOOD_COLORS = [0xc0392b, 0x922b21];
-export function bloodBurst(x, y, z) { burst(x, y, z, pick(BLOOD_COLORS), 10, 4, 0.6); }
