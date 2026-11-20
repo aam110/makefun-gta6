@@ -1,523 +1,290 @@
-// Palmera Heat — the story: five missions, one arc.
-// Mara Voss comes home to Palmera City to find her old crew scattered and
-// the Meridian Syndicate squeezing every street. With Theo the mechanic and
-// Lena the hacker, she drives, steals and fights her way to the syndicate's
-// boss, Vera Castellan — and burns the whole operation down.
-//
-// Each mission is a list of steps. A step completes when its condition is
-// met; the manager moves the beacon, the minimap blip and the objective
-// text. Fail states (wasted, busted, timer out) offer a retry.
+// CAYO BRAVO — missions.js: 8 staged story missions for Dario "Río" Voss and
+// his crew, taking the island back from Don Aurelio Salas, the Harbormaster.
+// Each mission is a chain of stages: drive, reach, wreck, eliminate, escape.
 
-import * as THREE from 'three';
-import { LANDMARKS } from './config.js';
-import { Car } from './vehicles.js';
+import { spawnVehicle } from './vehicles.js';
+import { spawnPed } from './pedestrians.js';
+import { raiseWanted } from './police.js';
 
 export const MISSIONS = [
   {
-    id: 0,
-    title: 'HOMECOMING HEAT',
-    giver: 'Theo Brandt',
-    brief: 'Mara is back in Palmera after three years away. Theo needs a driver — steal a car and get to his garage.',
-    reward: 500,
-    steps: [
-      { type: 'enterCar', text: 'Steal a car — walk up to one and press E', say: ['Mara', 'Three years gone. Palmera still smells like salt and gasoline.'] },
-      { type: 'driveTo', pos: { x: LANDMARKS.garage.x + 14, z: LANDMARKS.garage.z }, r: 10, text: "Drive to Theo's Garage", say: ['Theo', 'Mara! About time. Get over here — I\'ve got work for the best wheelwoman in the city.'] },
-      { type: 'talk', npc: 'theo', pos: { x: LANDMARKS.garage.x - 8, z: LANDMARKS.garage.z + 12 }, r: 4, text: 'Talk to Theo (press E)', say: ['Theo', 'The Meridian Syndicate runs this town now. Vera Castellan. We take her down, street by street.'] },
+    id: 1, name: 'FIRST LIGHT', pay: 800, rp: 300,
+    intro: { who: 'NADIA KESTREL', role: 'DRIVER', text: "Río! You're back. Meet me at the marina — the Harbormaster's men are already asking about you." },
+    stages: [
+      { name: 'MEET NADIA', type: 'goto', x: 250, z: -160, radius: 10, text: 'Drive to the marina and meet Nadia.', next: 'Follow her to the garage' },
+      { name: 'FOLLOW NADIA', type: 'drive', x: -90, z: -150, radius: 12, text: 'Follow Nadia to the garage in Mercado Viejo.', next: 'Park inside the garage' },
+      { name: 'PARK UP', type: 'goto', x: -90, z: -150, radius: 8, text: 'Park inside the garage to end the day.', next: 'Mission complete' },
     ],
   },
   {
-    id: 1,
-    title: 'THE LEDGER RUN',
-    giver: 'Lena Kaur',
-    brief: 'Lena has the syndicate\'s courier route. Pick her up, grab the three dead drops, and shake the cops.',
-    reward: 800,
-    steps: [
-      { type: 'driveTo', pos: { x: LANDMARKS.apartment.x, z: LANDMARKS.apartment.z + 16 }, r: 10, text: "Drive to Lena's Apartment", say: ['Lena', 'Mara, I\'m in. The courier drops are all over the east side — come get me.'] },
-      { type: 'talk', npc: 'lena', pos: { x: LANDMARKS.apartment.x, z: LANDMARKS.apartment.z + 16 }, r: 4, text: 'Pick up Lena (press E)' },
-      { type: 'collect', items: [
-        { x: 160, z: -32 }, { x: 224, z: 96 }, { x: 96, z: 160 },
-      ], text: 'Collect the 3 dead drops (drive through them)', say: ['Lena', 'Three drops, three ledgers. Grab them all and the syndicate\'s books are ours.'] },
-      { type: 'escape', text: 'Lose the cops — break line of sight until the heat is off', say: ['Lena', 'PD is on us! Lose them, Mara — lose them now!'] },
-      { type: 'driveTo', pos: { x: LANDMARKS.safehouse.x, z: LANDMARKS.safehouse.z + 12 }, r: 10, text: 'Get back to the Safehouse', say: ['Lena', 'We did it. Vera\'s whole operation, in three little notebooks.'] },
+    id: 2, name: 'HOT PLATES', pay: 1200, rp: 400,
+    intro: { who: 'TOMÁS IBARRA', role: 'MECHANIC', text: "I need a clean ride, Río. Any car off the street — just don't bring the whole CBPD with you." },
+    stages: [
+      { name: 'STEAL A RIDE', type: 'steal', text: 'Steal any car on the street (E to jack it).', next: 'Lose the heat' },
+      { name: 'LOSE THE HEAT', type: 'lose', text: 'Break line of sight until your wanted level clears.', next: 'Deliver the car to Tomás' },
+      { name: 'DELIVER', type: 'drive', x: -90, z: -150, radius: 12, text: 'Deliver the clean car to the garage.', next: 'Mission complete' },
     ],
   },
   {
-    id: 2,
-    title: 'NEON TIDE',
-    giver: 'Theo Brandt',
-    brief: 'The syndicate\'s street crew challenged Theo\'s garage to a boardwalk race. Beat the clock through four checkpoints.',
-    reward: 1200,
-    steps: [
-      { type: 'enterCar', text: 'Get in a car — the race starts at the Boardwalk', say: ['Theo', 'Their crew thinks they own the boardwalk. Show them what a real driver does.'] },
-      { type: 'race', checkpoints: [
-        { x: 352, z: -160 }, { x: 352, z: 160 }, { x: 224, z: 224 }, { x: 0, z: 224 },
-      ], time: 150, text: 'Race! Hit every checkpoint before the clock runs out' },
-      { type: 'driveTo', pos: { x: LANDMARKS.garage.x + 14, z: LANDMARKS.garage.z }, r: 10, text: 'Bring the car home to the Garage', say: ['Theo', 'That\'s my girl. The whole boardwalk saw it — the syndicate crew is finished.'] },
+    id: 3, name: 'SAND & SMOKE', pay: 1800, rp: 550,
+    intro: { who: 'SELMA OKAFOR', role: 'LOOKOUT', text: "Salas's runners took the beach meet. Three of them, armed. Clear them out and the sand is ours." },
+    stages: [
+      { name: 'REACH THE BEACH', type: 'goto', x: -240, z: 90, radius: 14, text: 'Get to the beach meet at Puerto Arena.', next: 'Take out the runners' },
+      { name: 'CLEAR THE RUNNERS', type: 'eliminate', count: 3, x: -240, z: 90, text: 'Take out the 3 armed runners on the sand.', next: 'Meet Selma at the boardwalk' },
+      { name: 'DEBRIEF', type: 'goto', x: -225, z: 150, radius: 10, text: 'Meet Selma at the boardwalk.', next: 'Mission complete' },
     ],
   },
   {
-    id: 3,
-    title: 'THE MERIDIAN JOB',
-    giver: 'Lena Kaur',
-    brief: 'The casino vault holds Vera\'s blackmail files. Walk in, take the case, and get out while the whole city hunts you.',
-    reward: 2000,
-    steps: [
-      { type: 'goto', pos: { x: LANDMARKS.casino.x, z: LANDMARKS.casino.z + 22 }, r: 8, text: 'Reach the Meridian Casino entrance', say: ['Lena', 'The case is in the lobby vault. Security is light — Vera never thought anyone would dare.'] },
-      { type: 'grab', pos: { x: LANDMARKS.casino.x, z: LANDMARKS.casino.z + 22 }, r: 4, text: 'Grab the vault case (press E)' },
-      { type: 'escape', text: 'Escape with the case — lose the 3-star wanted level', say: ['Lena', 'Alarms everywhere! Every cop in Palmera is coming. Run!'] },
-      { type: 'driveTo', pos: { x: LANDMARKS.safehouse.x, z: LANDMARKS.safehouse.z + 12 }, r: 10, text: 'Get the case to the Safehouse', say: ['Mara', 'We have everything. Vera\'s empire ends tonight.'] },
+    id: 4, name: "THE HARBORMASTER'S TOLL", pay: 2400, rp: 700,
+    intro: { who: 'NADIA KESTREL', role: 'DRIVER', text: "Salas runs a toll convoy through Altavista every evening. Wreck the escort and the toll dies with it." },
+    stages: [
+      { name: 'FIND THE CONVOY', type: 'drive', x: 30, z: -120, radius: 16, text: 'Intercept the convoy in Altavista.', next: 'Wreck the escort' },
+      { name: 'WRECK THE ESCORT', type: 'wreck', text: 'Ram the black escort SUV until it is scrap.', next: 'Escape the CBPD' },
+      { name: 'ESCAPE', type: 'lose', text: 'Lose the CBPD and get clear.', next: 'Mission complete' },
     ],
   },
   {
-    id: 4,
-    title: 'HEATWAVE',
-    giver: 'Mara Voss',
-    brief: 'Vera Castellan is fleeing Palmera in her armoured limo. Run her down, end the Meridian Syndicate, and vanish into the sunset.',
-    reward: 5000,
-    steps: [
-      { type: 'chase', text: "Hunt Vera's limo — smash it until it burns", say: ['Vera', 'You think you can take my city, little driver? Come and try.'] },
-      { type: 'escape', text: 'Lose the heat — the whole PD is after you', say: ['Theo', 'She\'s done. Now disappear, Mara. The marina, go!'] },
-      { type: 'driveTo', pos: { x: LANDMARKS.marina.x, z: LANDMARKS.marina.z }, r: 12, text: 'Escape to Sunset Marina', say: ['Mara', 'Palmera is ours again. Time to watch the sunset.'] },
+    id: 5, name: 'MIDNIGHT FERRY', pay: 3000, rp: 850,
+    intro: { who: 'TOMÁS IBARRA', role: 'MECHANIC', text: 'Cargo run, Río. Pier 2, before the ferry sails. The roadblocks will be out — drive like the sunset is chasing you.' },
+    stages: [
+      { name: 'LOAD THE CARGO', type: 'goto', x: -150, z: 210, radius: 10, text: 'Pick up the cargo at the Lumbre warehouse.', next: 'Race to Pier 2' },
+      { name: 'RACE TO PIER 2', type: 'drive', x: 280, z: -90, radius: 14, timer: 150, text: 'Reach Pier 2 before the ferry sails.', next: 'Lose any pursuit' },
+      { name: 'SLIP AWAY', type: 'lose', text: 'Slip away clean and the run is yours.', next: 'Mission complete' },
+    ],
+  },
+  {
+    id: 6, name: 'EMBER RUN', pay: 4200, rp: 1100,
+    intro: { who: 'SELMA OKAFOR', role: 'LOOKOUT', text: "Salas's armoured limo is heading for the lighthouse road. Wreck it before it reaches El Faro — the whole island is watching." },
+    stages: [
+      { name: 'CATCH THE LIMO', type: 'drive', x: 60, z: 180, radius: 18, text: 'Catch up with the limo on Coral Row.', next: 'Wreck the limo' },
+      { name: 'WRECK THE LIMO', type: 'wreck', text: 'Ram the armoured limo until it burns.', next: 'Vanish before the CBPD closes in' },
+      { name: 'VANISH', type: 'lose', text: 'Vanish before the CBPD closes in.', next: 'Mission complete' },
+    ],
+  },
+  {
+    id: 7, name: 'BLACKOUT ON CORAL ROW', pay: 5200, rp: 1300,
+    intro: { who: 'NADIA KESTREL', role: 'DRIVER', text: "The ledger is in Salas's Coral Row office. Guards on the door, cameras everywhere. Go in quiet — or go in loud, your call." },
+    stages: [
+      { name: 'REACH THE OFFICE', type: 'goto', x: 0, z: 180, radius: 12, text: 'Reach the Coral Row office on foot.', next: 'Take out the guards' },
+      { name: 'TAKE THE GUARDS', type: 'eliminate', count: 4, x: 0, z: 180, text: 'Take out the 4 guards at the office.', next: 'Grab the ledger' },
+      { name: 'GRAB THE LEDGER', type: 'goto', x: 0, z: 180, radius: 8, text: 'Grab the ledger from the office.', next: 'Get out clean' },
+      { name: 'GET OUT CLEAN', type: 'lose', text: 'Get out clean — no stars, no tail.', next: 'Mission complete' },
+    ],
+  },
+  {
+    id: 8, name: 'GOLDEN HOUR', pay: 8000, rp: 2000,
+    intro: { who: 'NADIA KESTREL', role: 'DRIVER', text: "The boat sails in two minutes, Río. Five stars, the whole island, one road to El Faro. Shake them all and get to the pier!" },
+    stages: [
+      { name: 'THE MANHUNT', type: 'lose', heat: 5, text: 'Lose the 5-star manhunt before the boat sails.', next: 'Reach the boat at El Faro' },
+      { name: 'REACH THE BOAT', type: 'drive', x: 262, z: 262, radius: 16, timer: 150, text: 'Reach the boat at the El Faro pier.', next: 'Sail into the sunset' },
+      { name: 'SAIL AWAY', type: 'goto', x: 262, z: 262, radius: 10, text: 'Board the boat and sail into the sunset.', next: 'Cayo Bravo is yours' },
     ],
   },
 ];
 
-function makeBeacon() {
-  const group = new THREE.Group();
-  const column = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.6, 1.6, 60, 12, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: 0xffd24d, transparent: true, opacity: 0.38,
-      side: THREE.DoubleSide, depthWrite: false,
-    }),
-  );
-  column.position.y = 30;
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(2.2, 3.2, 32),
-    new THREE.MeshBasicMaterial({ color: 0xffd24d, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.15;
-  const arrow = new THREE.Mesh(
-    new THREE.ConeGeometry(1.1, 2.4, 4),
-    new THREE.MeshBasicMaterial({ color: 0xffd24d }),
-  );
-  arrow.rotation.x = Math.PI;
-  arrow.position.y = 9;
-  group.add(column, ring, arrow);
-  group.userData.ring = ring;
-  group.userData.arrow = arrow;
-  return group;
+export function createMissionState() {
+  return {
+    index: 0,            // current mission (0-based)
+    stage: 0,
+    active: false,
+    completed: 0,
+    timer: 0,
+    targetVehicle: null,
+    enemies: [],
+    enemiesLeft: 0,
+    beaconOn: false,
+  };
 }
 
-function makeCheckpointRing() {
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(4.5, 0.35, 8, 32),
-    new THREE.MeshBasicMaterial({ color: 0x38e08b }),
-  );
-  ring.position.y = 3;
-  return ring;
+export function currentMission(G) {
+  return MISSIONS[Math.min(G.missions.index, MISSIONS.length - 1)];
 }
 
-function makePickupMarker() {
-  const group = new THREE.Group();
-  const box = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshBasicMaterial({ color: 0x38e08b }),
-  );
-  box.position.y = 1.2;
-  const glow = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.8, 1.8, 5, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0x38e08b, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  glow.position.y = 2.5;
-  group.add(box, glow);
-  group.userData.box = box;
-  return group;
+export function currentStage(G) {
+  const m = currentMission(G);
+  return m.stages[Math.min(G.missions.stage, m.stages.length - 1)];
 }
 
-export class MissionManager {
-  constructor(scene, city, rng) {
-    this.scene = scene;
-    this.city = city;
-    this.rng = rng;
-    this.activeIndex = -1;
-    this.stepIndex = 0;
-    this.state = 'free'; // free | active | passed | failed
-    this.beacon = makeBeacon();
-    this.beacon.visible = false;
-    scene.add(this.beacon);
-    this.checkpointMesh = null;
-    this.pickupMeshes = [];
-    this.targetCar = null;
-    this.targetCarDriver = null;
-    this.timer = 0;
-    this.collected = 0;
-    this.currentText = '';
-    this.currentTitle = '';
-    this.npcMarkers = new Map();
-    this._buildNpcs();
-  }
+export function startMission(G, index) {
+  const ms = G.missions;
+  ms.index = index;
+  ms.stage = 0;
+  ms.active = true;
+  ms.timer = 0;
+  cleanupMissionEntities(G);
+  const m = MISSIONS[index];
+  G.hud.toast('MISSION ' + m.id + ' · ' + m.name);
+  G.hud.showDialogue(m.intro.who, m.intro.role, m.intro.text, 7);
+  G.audio.missionStart();
+  enterStage(G);
+}
 
-  _buildNpcs() {
-    // Theo stands by his garage, Lena by her apartment. Simple figures with
-    // a floating marker so the player can find them.
-    const makeNpc = (shirt, x, z) => {
-      const group = new THREE.Group();
-      const torso = new THREE.Mesh(
-        new THREE.BoxGeometry(0.66, 0.8, 0.36),
-        new THREE.MeshLambertMaterial({ color: shirt }),
-      );
-      torso.position.y = 1.12;
-      torso.castShadow = true;
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.25, 12, 10),
-        new THREE.MeshLambertMaterial({ color: 0xe0ac69 }),
-      );
-      head.position.y = 1.8;
-      const legs = new THREE.Mesh(
-        new THREE.BoxGeometry(0.56, 0.74, 0.3),
-        new THREE.MeshLambertMaterial({ color: 0x2c3e50 }),
-      );
-      legs.position.y = 0.37;
-      const marker = new THREE.Mesh(
-        new THREE.ConeGeometry(0.5, 1, 4),
-        new THREE.MeshBasicMaterial({ color: 0x38e08b }),
-      );
-      marker.rotation.x = Math.PI;
-      marker.position.y = 3.2;
-      group.add(torso, head, legs, marker);
-      group.position.set(x, 0, z);
-      group.userData.marker = marker;
-      this.scene.add(group);
-      return group;
-    };
-    this.npcMarkers.set('theo', makeNpc(0x2e6fc2, LANDMARKS.garage.x - 8, LANDMARKS.garage.z + 12));
-    this.npcMarkers.set('lena', makeNpc(0x9b59b6, LANDMARKS.apartment.x, LANDMARKS.apartment.z + 16));
+export function cleanupMissionEntities(G) {
+  const ms = G.missions;
+  if (ms.targetVehicle && !ms.targetVehicle.dead) {
+    G.scene.remove(ms.targetVehicle.mesh);
+    G.vehicles = G.vehicles.filter((v) => v !== ms.targetVehicle);
   }
-
-  get mission() {
-    return this.activeIndex >= 0 ? MISSIONS[this.activeIndex] : null;
+  ms.targetVehicle = null;
+  for (const e of ms.enemies) {
+    if (!e.dead) { G.scene.remove(e.mesh); G.peds = G.peds.filter((p) => p !== e); }
   }
+  ms.enemies = [];
+  ms.enemiesLeft = 0;
+}
 
-  get step() {
-    const m = this.mission;
-    return m ? m.steps[this.stepIndex] : null;
+// Entering a stage spawns whatever it needs: target cars, enemies, heat.
+export function enterStage(G) {
+  const ms = G.missions;
+  const st = currentStage(G);
+  ms.timer = st.timer ?? 0;
+  if (st.heat) G.player.wanted = st.heat;
+  if (st.type === 'wreck') {
+    const m = currentMission(G);
+    const tx = m.id === 6 ? 90 : 60;
+    const tz = m.id === 6 ? 210 : -90;
+    const target = spawnVehicle(G.scene, 4, tx, tz, Math.PI / 2, { condition: 100 });
+    target.driver = 'target';
+    target.cruiseSpeed = 24;
+    target.vertical = false;
+    target.dir = 1;
+    target.road = tz;
+    G.vehicles.push(target);
+    ms.targetVehicle = target;
+    G.hud.toast('TARGET MARKED — WRECK IT');
   }
-
-  get targetPos() {
-    const s = this.step;
-    if (!s) return null;
-    if (s.pos) return s.pos;
-    if (s.type === 'collect' && this.pickupMeshes.length > 0) {
-      const p = this.pickupMeshes.find((m) => m.visible);
-      return p ? { x: p.position.x, z: p.position.z } : null;
+  if (st.type === 'eliminate') {
+    ms.enemiesLeft = st.count;
+    for (let i = 0; i < st.count; i++) {
+      const e = spawnPed(G, st.x + (i - 1) * 7, st.z + (i % 2) * 8 - 4, { hostile: true, health: 60, state: 'guard' });
+      e.name = "Salas Runner";
+      ms.enemies.push(e);
     }
-    if (s.type === 'race' && this.checkpointMesh) {
-      return { x: this.checkpointMesh.position.x, z: this.checkpointMesh.position.z };
-    }
-    if (s.type === 'chase' && this.targetCar) {
-      return { x: this.targetCar.pos.x, z: this.targetCar.pos.z };
-    }
-    return null;
+    raiseWanted(G, 1);
   }
+  updateBeacon(G);
+}
 
-  startMission(index, world) {
-    this.activeIndex = index;
-    this.stepIndex = 0;
-    this.state = 'active';
-    this.collected = 0;
-    const m = this.mission;
-    this.currentTitle = m.title;
-    world.hud.missionCard(m.title, m.brief, m.giver);
-    world.audio.missionPass();
-    this._enterStep(world);
+export function updateBeacon(G) {
+  const ms = G.missions;
+  const st = currentStage(G);
+  const b = G.world.beacon;
+  if (!ms.active) { b.visible = false; return; }
+  if (st.type === 'wreck' && ms.targetVehicle) {
+    b.position.set(ms.targetVehicle.x, 0, ms.targetVehicle.z);
+    b.visible = true;
+  } else if (st.x !== undefined) {
+    b.position.set(st.x, 0, st.z);
+    b.visible = true;
+  } else b.visible = false;
+}
+
+function advanceStage(G) {
+  const ms = G.missions;
+  const m = currentMission(G);
+  ms.stage += 1;
+  G.audio.stageClear();
+  if (ms.stage >= m.stages.length) {
+    completeMission(G);
+    return;
   }
+  const st = currentStage(G);
+  G.hud.toast('STAGE ' + (ms.stage + 1) + '/' + m.stages.length + ' · ' + st.name);
+  enterStage(G);
+}
 
-  _enterStep(world) {
-    const s = this.step;
-    if (!s) return;
-    this.currentText = s.text;
-    if (s.say) world.hud.showSubtitle(s.say[0], s.say[1], 5000);
-    this._clearStepMeshes();
-    if (s.type === 'collect') {
-      for (const item of s.items) {
-        const marker = makePickupMarker();
-        marker.position.set(item.x, 0, item.z);
-        this.scene.add(marker);
-        this.pickupMeshes.push(marker);
+export function completeMission(G) {
+  const ms = G.missions;
+  const m = currentMission(G);
+  ms.active = false;
+  ms.completed += 1;
+  cleanupMissionEntities(G);
+  G.player.money += m.pay;
+  G.player.addRp(m.rp);
+  G.world.beacon.visible = false;
+  G.hud.toast('MISSION COMPLETE · +$' + m.pay.toLocaleString('en-US') + ' · +' + m.rp + ' RP');
+  G.audio.missionComplete();
+  G.player.wanted = Math.max(0, G.player.wanted - 1);
+  if (ms.index + 1 < MISSIONS.length) {
+    // Next mission starts after a breather.
+    ms.nextIndex = ms.index + 1;
+    ms.nextTimer = 6;
+  } else {
+    G.endGame(true);
+  }
+}
+
+export function failMission(G, reason) {
+  const ms = G.missions;
+  ms.active = false;
+  cleanupMissionEntities(G);
+  G.world.beacon.visible = false;
+  G.hud.toast('MISSION FAILED — ' + reason);
+  G.audio.missionFail();
+  ms.nextIndex = ms.index; // retry the same mission shortly
+  ms.nextTimer = 4;
+}
+
+// Target vehicles flee along the road grid like traffic, but faster.
+export function updateTargetVehicle(car, dt, G) {
+  if (car.dead) return;
+  const p = G.player;
+  const dx = p.x - car.x, dz = p.z - car.z;
+  const d = Math.hypot(dx, dz);
+  // Flee: steer away from the player, keep to the roads by snapping heading.
+  const fleeHeading = Math.atan2(dx, dz);
+  let dh = fleeHeading - car.heading;
+  while (dh > Math.PI) dh -= Math.PI * 2;
+  while (dh < -Math.PI) dh += Math.PI * 2;
+  car.heading += Math.max(-1.8 * dt, Math.min(1.8 * dt, dh));
+  car.speed += ((d < 60 ? 30 : 20) - car.speed) * Math.min(1, dt * 1.5);
+  const nx = car.x - Math.sin(car.heading) * car.speed * dt;
+  const nz = car.z - Math.cos(car.heading) * car.speed * dt;
+  car.x = Math.max(-288, Math.min(288, nx));
+  car.z = Math.max(-288, Math.min(288, nz));
+  car.mesh.position.set(car.x, 0, car.z);
+  car.mesh.rotation.y = car.heading;
+  if (car.condition < 45) {
+    car.smokeTimer -= dt;
+    if (car.smokeTimer <= 0) { car.smokeTimer = 0.15; G.effects.addSmoke(car.x, 1.4, car.z); }
+  }
+}
+
+export function updateMissions(G, dt) {
+  const ms = G.missions;
+  if (!ms.active) {
+    if (ms.nextTimer !== undefined) {
+      ms.nextTimer -= dt;
+      if (ms.nextTimer <= 0) {
+        ms.nextTimer = undefined;
+        startMission(G, ms.nextIndex ?? ms.index);
       }
     }
-    if (s.type === 'race') {
-      this.timer = s.time;
-      this.raceIndex = 0;
-      this.checkpointMesh = makeCheckpointRing();
-      const cp = s.checkpoints[0];
-      this.checkpointMesh.position.set(cp.x, 0, cp.z);
-      this.scene.add(this.checkpointMesh);
-    }
-    if (s.type === 'chase') {
-      this._spawnLimo(world);
-    }
-    if (s.type === 'escape') {
-      // The escape steps start hot: the city is already hunting Mara.
-      const want = this.activeIndex === 3 ? 3 : this.activeIndex === 4 ? 4 : 2;
-      world.police.setStars(want);
-    }
-    if (s.type === 'grab') {
-      const marker = makePickupMarker();
-      marker.position.set(s.pos.x, 0, s.pos.z);
-      this.scene.add(marker);
-      this.pickupMeshes.push(marker);
-    }
-    this._placeBeacon();
+    return;
   }
-
-  _spawnLimo(world) {
-    const start = { x: 64, z: -192 };
-    const limo = new Car(this.scene, 'limo', 0x111111, start.x, start.z, 0);
-    limo.driver = 'target';
-    this.targetCar = limo;
-    this.targetCarDriver = {
-      axis: 'z', road: 64, dir: 1, targetSpeed: 17, turning: 0,
-      turnFrom: 0, turnTo: 0, turnX: 0, turnZ: 0,
-    };
-    limo.speed = 17;
-    world.hud.showSubtitle('Vera', 'My limo is faster than your little stolen car, Mara.', 4000);
+  const st = currentStage(G);
+  const p = G.player;
+  if (ms.timer > 0) {
+    ms.timer -= dt;
+    if (ms.timer <= 0) { failMission(G, 'OUT OF TIME'); return; }
   }
-
-  _clearStepMeshes() {
-    for (const m of this.pickupMeshes) this.scene.remove(m);
-    this.pickupMeshes = [];
-    if (this.checkpointMesh) {
-      this.scene.remove(this.checkpointMesh);
-      this.checkpointMesh = null;
-    }
+  if (st.type === 'goto' || st.type === 'drive') {
+    const d = Math.hypot(p.x - st.x, p.z - st.z);
+    if (d < st.radius) advanceStage(G);
+  } else if (st.type === 'steal') {
+    if (p.car) advanceStage(G);
+  } else if (st.type === 'lose') {
+    if (p.wanted === 0) advanceStage(G);
+  } else if (st.type === 'wreck') {
+    if (ms.targetVehicle && ms.targetVehicle.dead) advanceStage(G);
+    else if (ms.targetVehicle) updateTargetVehicle(ms.targetVehicle, dt, G);
+  } else if (st.type === 'eliminate') {
+    if (ms.enemiesLeft <= 0) advanceStage(G);
   }
-
-  _placeBeacon() {
-    const target = this.targetPos;
-    if (target) {
-      this.beacon.visible = true;
-      this.beacon.position.set(target.x, 0, target.z);
-    } else {
-      this.beacon.visible = false;
-    }
-  }
-
-  _nextStep(world) {
-    this.stepIndex++;
-    if (this.stepIndex >= this.mission.steps.length) {
-      this._completeMission(world);
-      return;
-    }
-    this._enterStep(world);
-    world.audio.pickup();
-  }
-
-  _completeMission(world) {
-    const m = this.mission;
-    this.state = 'passed';
-    this.beacon.visible = false;
-    this._clearStepMeshes();
-    if (this.targetCar) {
-      this.targetCar.remove();
-      this.targetCar = null;
-    }
-    world.onMissionPassed(m);
-  }
-
-  failMission(world, reason) {
-    if (this.state !== 'active') return;
-    this.state = 'failed';
-    this.beacon.visible = false;
-    this._clearStepMeshes();
-    if (this.targetCar) {
-      this.targetCar.remove();
-      this.targetCar = null;
-    }
-    world.onMissionFailed(reason);
-  }
-
-  retry(world) {
-    if (this.activeIndex < 0) return;
-    this.state = 'active';
-    this.stepIndex = 0;
-    this.collected = 0;
-    this._enterStep(world);
-  }
-
-  /** The player pressed E near something mission-related. */
-  tryInteract(world) {
-    if (this.state !== 'active') return false;
-    const s = this.step;
-    const p = world.player.pos;
-    if ((s.type === 'talk' || s.type === 'grab') && s.pos) {
-      const d = Math.hypot(p.x - s.pos.x, p.z - s.pos.z);
-      if (d < (s.r || 4) + 1) {
-        if (s.type === 'grab') {
-          world.audio.pickup();
-          world.hud.showSubtitle('Mara', 'Got the case. Time to run.', 3000);
-        }
-        this._nextStep(world);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  update(dt, world) {
-    // Animate the beacon, NPC markers and pickup markers.
-    const t = world.time;
-    if (this.beacon.visible) {
-      this.beacon.userData.arrow.position.y = 9 + Math.sin(t * 2.2) * 1.2;
-      this.beacon.userData.arrow.rotation.y += dt;
-      const s = 1 + Math.sin(t * 3) * 0.08;
-      this.beacon.userData.ring.scale.set(s, s, s);
-    }
-    for (const npc of this.npcMarkers.values()) {
-      npc.userData.marker.position.y = 3.2 + Math.sin(t * 2 + npc.position.x) * 0.3;
-      npc.userData.marker.rotation.y += dt * 1.5;
-    }
-    for (const m of this.pickupMeshes) {
-      if (!m.visible) continue;
-      m.userData.box.rotation.y += dt * 2;
-      m.userData.box.position.y = 1.2 + Math.sin(t * 2.5) * 0.25;
-    }
-    if (this.checkpointMesh) {
-      this.checkpointMesh.rotation.y += dt * 0.8;
-    }
-    // Drive Vera's limo along the roads, fleeing the player.
-    if (this.targetCar && !this.targetCar.dead) {
-      this._driveLimo(dt, world);
-    }
-
-    if (this.state !== 'active') return;
-    const s = this.step;
-    const p = world.player.pos;
-    switch (s.type) {
-      case 'enterCar':
-        if (world.player.inCar) this._nextStep(world);
-        break;
-      case 'goto':
-      case 'driveTo': {
-        const d = Math.hypot(p.x - s.pos.x, p.z - s.pos.z);
-        if (d < s.r) this._nextStep(world);
-        break;
-      }
-      case 'talk':
-      case 'grab':
-        // Completed by tryInteract (E key).
-        break;
-      case 'collect': {
-        for (const m of this.pickupMeshes) {
-          if (!m.visible) continue;
-          const d = Math.hypot(p.x - m.position.x, p.z - m.position.z);
-          if (d < 4) {
-            m.visible = false;
-            this.collected++;
-            world.audio.pickup();
-            world.hud.showSubtitle('Lena', `Drop ${this.collected} of ${s.items.length} secured.`, 2200);
-            this.currentText = `Collect the dead drops — ${this.collected}/${s.items.length}`;
-            this._placeBeacon();
-            if (this.collected >= s.items.length) this._nextStep(world);
-          }
-        }
-        break;
-      }
-      case 'race': {
-        this.timer -= dt;
-        if (this.timer <= 0) {
-          this.failMission(world, 'Out of time — the syndicate crew takes the boardwalk.');
-          break;
-        }
-        const cp = s.checkpoints[this.raceIndex];
-        const d = Math.hypot(p.x - cp.x, p.z - cp.z);
-        if (d < 7) {
-          world.audio.pickup();
-          this.raceIndex++;
-          if (this.raceIndex >= s.checkpoints.length) {
-            this._nextStep(world);
-          } else {
-            const next = s.checkpoints[this.raceIndex];
-            this.checkpointMesh.position.set(next.x, 0, next.z);
-            this.currentText = `Race! Checkpoint ${this.raceIndex + 1} of ${s.checkpoints.length}`;
-            this._placeBeacon();
-          }
-        }
-        break;
-      }
-      case 'chase': {
-        if (this.targetCar && this.targetCar.dead) {
-          world.hud.showSubtitle('Vera', 'No... my city...', 3000);
-          this._nextStep(world);
-        }
-        break;
-      }
-      case 'escape': {
-        if (world.police.stars === 0) this._nextStep(world);
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  _driveLimo(dt, world) {
-    const limo = this.targetCar;
-    const d = this.targetCarDriver;
-    const playerPos = world.player.pos;
-    // Flee: keep driving; turn away from the player at intersections.
-    const coord = d.axis === 'x' ? limo.pos.x : limo.pos.z;
-    let nextRoad = null;
-    for (const r of [-320, -256, -192, -128, -64, 0, 64, 128, 192, 256, 320]) {
-      const dist = (r - coord) * d.dir;
-      if (dist > 0 && (nextRoad === null || dist < Math.abs(nextRoad - coord))) nextRoad = r;
-    }
-    if (d.turning > 0) {
-      d.turning -= dt;
-      const k = 1 - Math.max(0, d.turning) / 0.9;
-      limo.heading = d.turnFrom + (d.turnTo - d.turnFrom) * k;
-      limo.pos.x += (d.turnX - limo.pos.x) * Math.min(1, dt * 2.2);
-      limo.pos.z += (d.turnZ - limo.pos.z) * Math.min(1, dt * 2.2);
-    } else if (nextRoad !== null && Math.abs(coord - nextRoad) < 1.2) {
-      // Turn away from the player when possible.
-      const away = d.axis === 'x'
-        ? (playerPos.z > limo.pos.z ? -1 : 1)
-        : (playerPos.x > limo.pos.x ? 1 : -1);
-      const side = Math.random() < 0.7 ? away : -away;
-      const newAxis = d.axis === 'x' ? 'z' : 'x';
-      let newHeading = Math.round((limo.heading + side * Math.PI / 2) / (Math.PI / 2)) * (Math.PI / 2);
-      const newDir = newAxis === 'x'
-        ? (Math.sin(newHeading) > 0 ? 1 : -1)
-        : (Math.cos(newHeading) > 0 ? 1 : -1);
-      const laneOffset = newAxis === 'x' ? (newDir > 0 ? 3.5 : -3.5) : (newDir > 0 ? -3.5 : 3.5);
-      d.turning = 0.9;
-      d.turnFrom = limo.heading;
-      d.turnTo = newHeading;
-      if (newAxis === 'x') {
-        d.turnX = limo.pos.x;
-        d.turnZ = nextRoad + laneOffset;
-      } else {
-        d.turnX = nextRoad + laneOffset;
-        d.turnZ = limo.pos.z;
-      }
-      d.axis = newAxis;
-      d.road = nextRoad;
-      d.dir = newDir;
-    }
-    const f = limo.forward();
-    limo.pos.x += f.x * limo.speed * dt;
-    limo.pos.z += f.z * limo.speed * dt;
-    if (d.axis === 'x') {
-      const lane = d.road + (d.dir > 0 ? 3.5 : -3.5);
-      limo.pos.z += (lane - limo.pos.z) * Math.min(1, dt * 1.5);
-    } else {
-      const lane = d.road + (d.dir > 0 ? -3.5 : 3.5);
-      limo.pos.x += (lane - limo.pos.x) * Math.min(1, dt * 1.5);
-    }
-    limo.mesh.rotation.y = limo.heading;
-    limo.spinWheels(dt);
-    this._placeBeacon();
+  updateBeacon(G);
+  // Beacon pulse.
+  if (G.world.beacon.visible) {
+    const s = 1 + Math.sin(performance.now() / 280) * 0.08;
+    G.world.beacon.scale.set(s, 1, s);
   }
 }

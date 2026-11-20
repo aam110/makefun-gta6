@@ -1,49 +1,32 @@
-// Palmera Heat — the gta6-01 entry program (Node 22, standard library only).
-//
-// What it does: copy this repository's game/ (the playable static game) and
-// screenshots/ (four renders of the game itself) into the output directory,
-// then write dossier.json with make.fun's own library, exactly the summary
-// the sealed scorer rebuilds and compares byte for byte.
-//
-// The grader runs this program twice in a fresh container with no network,
-// a read-only copy of the repository and a writable /output; both runs must
-// write identical bytes. Nothing here depends on time, randomness or the
-// environment beyond the output directory, so the output is deterministic.
-//
-// Local check:
+// CAYO BRAVO — main.ts: hands the game in. Copies game/ and screenshots/ from
+// beside this file into the output directory and writes dossier.json with the
+// kit's buildDossier library. Node 22, standard library only; run it with:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// In the grader MAKEFUN_OUTPUT_DIR is unset and /output is used instead.
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 const repoRoot = fileURLToPath(new URL('.', import.meta.url));
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-function copyTree(name: string): void {
-  const from = join(repoRoot, name);
-  const to = join(outDir, name);
-  if (!existsSync(from)) return;
-  // Start clean so a stale file from an earlier run can never survive.
-  rmSync(to, { recursive: true, force: true });
-  cpSync(from, to, { recursive: true });
+mkdirSync(outputDir, { recursive: true });
+cpSync(join(repoRoot, 'game'), join(outputDir, 'game'), { recursive: true });
+mkdirSync(join(outputDir, 'screenshots'), { recursive: true });
+if (existsSync(join(repoRoot, 'screenshots'))) {
+  cpSync(join(repoRoot, 'screenshots'), join(outputDir, 'screenshots'), { recursive: true });
 }
 
-mkdirSync(outDir, { recursive: true });
-copyTree('game');
-copyTree('screenshots');
-
-// The gate's caps from the competition kit (reference/gate.json): only
-// text_max_bytes shapes the dossier's bytes; the rest make this program
-// fail exactly where the scorer would refuse the entry.
-writeFileSync(
-  join(outDir, 'dossier.json'),
-  buildDossier(outDir, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
-);
+// The gate's own caps, so a bad entry fails here instead of at the scorer:
+// at most 4 screenshots of 256 KiB, game/ under 993 files and 48 MiB, and the
+// dossier's source text capped at 160 KiB.
+const dossier = buildDossier(outputDir, {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  game_max_files: 993,
+  game_max_bytes: 50331648,
+  game_path_max_bytes: 1000,
+});
+writeFileSync(join(outputDir, 'dossier.json'), dossier);

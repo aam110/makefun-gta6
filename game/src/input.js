@@ -1,116 +1,75 @@
-// Palmera Heat — keyboard and mouse input.
-// One object owns every key, mouse button and look delta the game reads.
-// The camera turns with pointer lock when available, and with click-drag or
-// the arrow keys otherwise, so the game stays playable without a lock.
+// CAYO BRAVO — input.js: keyboard + mouse state, edge-triggered action keys,
+// and drag-to-orbit camera control. No pointer lock: the camera follows the
+// player and the mouse drags to look around.
 
-export class Input {
-  constructor() {
-    this.keys = new Set();
+export function createInput() {
+  const input = {
+    forward: false, back: false, left: false, right: false,
+    handbrake: false, run: false,
+    mouseDown: false, mouseX: 0, mouseY: 0,
+    camYawOffset: 0, camPitch: 0.42,
+    pressed: new Set(), // keys pressed since the last frame swap
+    framePressed: new Set(), // keys pressed during the previous frame (consumed now)
+    dragging: false, lastX: 0, lastY: 0,
+    sensitivity: 1,
+  };
+
+  const KEYMAP = {
+    KeyW: 'forward', ArrowUp: 'forward',
+    KeyS: 'back', ArrowDown: 'back',
+    KeyA: 'left', ArrowLeft: 'left',
+    KeyD: 'right', ArrowRight: 'right',
+    Space: 'handbrake', ShiftLeft: 'run', ShiftRight: 'run',
+  };
+
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    input.pressed.add(e.code);
+    const mapped = KEYMAP[e.code];
+    if (mapped) input[mapped] = true;
+    if (e.code === 'Space') e.preventDefault();
+  });
+  window.addEventListener('keyup', (e) => {
+    const mapped = KEYMAP[e.code];
+    if (mapped) input[mapped] = false;
+  });
+  window.addEventListener('blur', () => {
+    input.forward = input.back = input.left = input.right = false;
+    input.handbrake = input.run = input.mouseDown = false;
+  });
+
+  const canvas = document.getElementById('scene');
+  canvas.addEventListener('mousedown', (e) => {
+    input.mouseDown = true;
+    input.dragging = true;
+    input.lastX = e.clientX; input.lastY = e.clientY;
+    input.pressed.add('MouseDown');
+  });
+  window.addEventListener('mouseup', () => { input.mouseDown = false; input.dragging = false; });
+  window.addEventListener('mousemove', (e) => {
+    input.mouseX = e.clientX; input.mouseY = e.clientY;
+    if (!input.dragging) return;
+    const dx = e.clientX - input.lastX;
+    const dy = e.clientY - input.lastY;
+    input.lastX = e.clientX; input.lastY = e.clientY;
+    input.camYawOffset -= dx * 0.005 * input.sensitivity;
+    input.camPitch = Math.max(0.12, Math.min(1.1, input.camPitch + dy * 0.003 * input.sensitivity));
+  });
+  // Keep the camera drift centred when the player is not dragging.
+  input.update = function updateInput(dt) {
+    if (!this.dragging) this.camYawOffset *= Math.pow(0.25, dt);
+  };
+  // Frame swap: presses collected during the last frame (including during the
+  // slow render) move into framePressed; fresh presses keep accumulating in
+  // pressed for the next frame, so no keypress is ever wiped mid-frame.
+  input.beginFrame = function beginFrame() {
+    this.framePressed = this.pressed;
     this.pressed = new Set();
-    this.lookDX = 0;
-    this.lookDY = 0;
-    this.mouseDown = false;
-    this.mouseClicked = false;
-    this.locked = false;
-    this.dragging = false;
-    this.lastX = 0;
-    this.lastY = 0;
-    this.enabled = true;
-    this._onKeyDown = null;
-    this._onKeyUp = null;
-  }
-
-  attach(canvas) {
-    this._onKeyDown = (e) => {
-      if (!this.enabled) return;
-      if (e.code === 'Space') e.preventDefault();
-      if (!this.keys.has(e.code)) this.pressed.add(e.code);
-      this.keys.add(e.code);
-    };
-    this._onKeyUp = (e) => {
-      this.keys.delete(e.code);
-    };
-    window.addEventListener('keydown', this._onKeyDown);
-    window.addEventListener('keyup', this._onKeyUp);
-    window.addEventListener('blur', () => {
-      this.keys.clear();
-      this.pressed.clear();
-      this.mouseDown = false;
-      this.dragging = false;
-    });
-
-    document.addEventListener('pointerlockchange', () => {
-      this.locked = document.pointerLockElement === canvas;
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!this.enabled) return;
-      if (this.locked) {
-        this.lookDX += e.movementX || 0;
-        this.lookDY += e.movementY || 0;
-      } else if (this.dragging) {
-        this.lookDX += e.clientX - this.lastX;
-        this.lookDY += e.clientY - this.lastY;
-        this.lastX = e.clientX;
-        this.lastY = e.clientY;
-      }
-    });
-
-    canvas.addEventListener('mousedown', (e) => {
-      if (!this.enabled) return;
-      if (e.button === 0) {
-        this.mouseDown = true;
-        this.mouseClicked = true;
-        this.dragging = true;
-        this.lastX = e.clientX;
-        this.lastY = e.clientY;
-        if (!this.locked) {
-          try {
-            canvas.requestPointerLock();
-          } catch (err) { /* drag fallback stays available */ }
-        }
-      }
-    });
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) {
-        this.mouseDown = false;
-        this.dragging = false;
-      }
-    });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  }
-
-  isDown(code) {
-    return this.keys.has(code);
-  }
-
-  /** True once, on the frame the key went down. */
-  wasPressed(code) {
-    return this.pressed.has(code);
-  }
-
-  /** Look deltas since the last call, then cleared. */
-  consumeLook() {
-    const dx = this.lookDX;
-    const dy = this.lookDY;
-    this.lookDX = 0;
-    this.lookDY = 0;
-    return { dx, dy };
-  }
-
-  consumeClick() {
-    const c = this.mouseClicked;
-    this.mouseClicked = false;
-    return c;
-  }
-
-  /** End-of-frame housekeeping: edge-triggered state lives one frame. */
-  endFrame() {
-    this.pressed.clear();
-    this.mouseClicked = false;
-  }
-
-  releasePointerLock() {
-    if (document.pointerLockElement) document.exitPointerLock();
-  }
+  };
+  input.consume = function consume(code) {
+    if (this.framePressed.has(code)) { this.framePressed.delete(code); return true; }
+    return false;
+  };
+  input.endFrame = function endFrame() { /* kept for callers; swap is beginFrame */ };
+  return input;
 }

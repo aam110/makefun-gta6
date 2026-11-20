@@ -1,93 +1,86 @@
-# Palmera Heat
-
 [![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![rank](https://make.fun/badge/gta6-01/aam110/makefun-gta6/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/aam110/makefun-gta6/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-**Palmera Heat** is a complete open-world crime game in the browser, built for the [make.fun](https://make.fun) **gta6-01 — Make GTA 6** competition. It runs entirely offline from static files: a Three.js city, a five-mission story, traffic, pedestrians, police chases, combat, a minimap HUD and a save — no network request, no build step.
+# CAYO BRAVO — an open-world crime game
 
-## The game
+One island. One crew. One last sunset before the Harbormaster owns it all.
 
-Sun, salt, and stolen cars. **Mara Voss**, the best getaway driver Palmera City ever had, comes home after three years away to find the **Meridian Syndicate** squeezing every street. With **Theo Brandt**, a garage mechanic, and **Lena Kaur**, a hacker with the syndicate's books, she drives, steals and fights her way to the syndicate's boss, **Vera Castellan** — and burns the whole operation down.
+**Cayo Bravo** is a complete open-world crime game in the spirit of GTA 6, playable
+offline in a desktop browser from its own files — no network, no build step, just
+`node serve.ts` and open http://localhost:8080. Built with Three.js (vendored),
+every model, texture and sound is procedural: nothing is loaded from the internet.
 
-### Story — five missions
+## The story
 
-1. **Homecoming Heat** — Steal a car and reach Theo's Garage.
-2. **The Ledger Run** — Pick up Lena, grab three dead drops, lose the cops.
-3. **Neon Tide** — A timed boardwalk race against the syndicate's street crew.
-4. **The Meridian Job** — Walk into the Meridian Casino, take the vault case, escape a 3-star wanted level.
-5. **Heatwave** — Run Vera Castellan's armoured limo off the road and vanish into the sunset at Sunset Marina.
+Dario "Río" Voss, ex-boat racer, is back on Cayo Bravo — a sun-baked island city of
+beach boulevards, neon towers and a lighthouse on the point. Don Aurelio Salas, the
+Harbormaster, is buying the island pier by pier. Río rebuilds his crew — **Nadia
+Kestrel** (driver), **Tomás Ibarra** (mechanic) and **Selma Okafor** (lookout) — and
+runs 8 staged story missions to take it back, from a first light at the marina to a
+5-star manhunt and a boat sailing into the sunset.
 
-### Systems
+## What's in the game
 
-- **Open city** — a seeded procedural grid city: 100+ buildings, palm avenues, a beach, ocean, marina, lighthouse, stadium, park, casino tower, police station and hospital.
-- **On foot and by car** — run, sprint, jump, punch and shoot on foot; steal any parked or slow car and drive with arcade handling, handbrake drifts and a horn.
-- **Traffic and pedestrians** — cars follow road lanes and turn at intersections; pedestrians stroll the sidewalks and flee from gunfire.
-- **Wanted level and police** — 0–5 stars from heat: stealing, assault, gunfire and killing a cop all raise it. Police cars chase and ram; foot cops hunt on foot from two stars up. Break line of sight to cool off; get caught standing still and it's BUSTED.
-- **Combat** — pistol with crosshair aiming, car ramming, explosions, health and damage.
-- **HUD with minimap** — wanted stars, cash, health, mission objective with timer, speedometer, and a live circular minimap with mission, police and target blips.
-- **Start screen, pause menu, save** — new game / continue, how-to-play, pause with save and mission restart; progress auto-saves and persists in localStorage.
-- **Sound** — fully synthesized WebAudio: engine hum, sirens, gunshots, explosions, pickups, and a synthwave bassline. No audio files.
-- **Staging hooks** — `?shot=cover|drive|chase|mission&seed=N` arranges a composed, deterministic scene for screenshots.
+- **A living island city** — 600×600 m of grid streets with markings, a dense
+  downtown skyline, low beach blocks, palms, a boardwalk, umbrellas, a marina with
+  moored boats and the El Faro lighthouse — all under golden-hour sunset light with
+  long shadows and a violet-orange sky.
+- **Driving + on foot** — arcade car physics with handbrake drifts, enter/exit any
+  car, jack traffic cars (the driver flees and the CBPD notices), 8 named vehicle
+  models with condition and damage smoke.
+- **Traffic & pedestrians** — 26 cruising cars that brake for each other, 42
+  islanders strolling the sidewalks and the beach, fleeing when shots ring out.
+- **Police that hunt** — 1–5 wanted stars, named CBPD units with live tactics
+  (RAMMING, FLANKING, ROADBLOCK, SPOTLIGHT, MARKSMAN), roadblocks at 3★, the AIR-1
+  helicopter with a spotlight at 4★, and a real line-of-sight manhunt: break sight
+  to cool the heat down.
+- **Combat** — fists plus 4 firearms (P9, Viper SMG, Breaker 12G, Longbow) with ammo,
+  reloads, tracers, muzzle flashes and raycast hits on peds and cars.
+- **8 staged story missions** — drive, reach, wreck, eliminate and escape stages,
+  each with a mission card (stage x/y, objective, NEXT objective), a beacon marking
+  the target, timers, dialogue with character portraits, pay and RP rewards.
+- **Crew abilities** — Z Swap Plates (−1 wanted), X Quick Fix (repair), C Eyes Out
+  (blind ground units) — each with a cooldown.
+- **Progression** — 6 ranks from STREET RAT to KING OF CAYO with an RP bar, money,
+  health/armour, and a dense HUD: mission card, police response panel, weapon slots,
+  crew buttons, rank, wanted stars, speedometer + vehicle name + condition, radio
+  station, district name and a live street minimap.
+- **Save / menus / sound** — title screen (NEW GAME / LOAD GAME / SETTINGS / HOW TO
+  PLAY), 3 localStorage save slots, pause menu, settings (volume, sensitivity,
+  quality, radio), and fully procedural WebAudio: engine hum, a generative radio
+  with 3 stations, sirens, gunshots and mission stingers.
 
-## How to play
+## Controls
 
-Serve `game/` with any static server and open `index.html` in desktop Chrome:
-
-```sh
-node serve.ts
-# then open http://localhost:8080
-```
-
-| Key | Action |
+| Keys | Action |
 | --- | --- |
-| W A S D | Move / drive |
-| Mouse | Look (click to lock the pointer) |
-| Arrow keys | Turn camera |
-| Shift | Sprint |
-| Space | Jump / handbrake |
-| E | Steal / exit car · interact |
-| Left click | Shoot |
+| W A S D | Drive / walk |
+| Space | Handbrake |
+| Shift | Run (on foot) |
+| E | Enter / exit / jack a car |
 | F | Punch |
-| H | Horn |
-| M | Mute |
-| Esc / P | Pause |
+| Mouse + click | Aim / shoot |
+| 1–5 | Switch weapon · R reload |
+| Z / X / C | Crew abilities |
+| M | Next radio station |
+| P / Esc | Pause |
 
-Follow the golden **M** on the minimap to start the next story mission. Your safehouse heals you and saves the game.
+## Screenshots
 
-## Layout
+The 4 screenshots in `screenshots/` are real renders of the game, staged through
+URL params that set up live game states (`?shot=chase`, `?shot=drive`,
+`?shot=roadblock`, `?shot=mission` — see `shots.json` and `game/src/shots.js`).
 
-```
-game/
-  index.html            page shell, HUD, screens, import map
-  css/style.css         HUD and menu styling
-  vendor/three.module.min.js   Three.js 0.160.0 (vendored, minified)
-  src/
-    main.js             bootstrap, loop, screens, game events
-    config.js           tuning, palette, city layout, landmarks
-    rng.js              seeded RNG (deterministic city)
-    city.js             procedural city, ground plan, collision
-    vehicles.js         car factory, driving physics, traffic AI
-    pedestrians.js      pedestrians and foot cops
-    player.js           Mara on foot, combat, car entry
-    police.js           wanted system and police chase AI
-    missions.js         the five-mission story arc
-    hud.js              HUD, minimap, banners, subtitles
-    camera.js           third-person chase camera
-    effects.js          particles, explosions, flashes
-    audio.js            synthesized WebAudio sound
-    input.js            keyboard and mouse
-    save.js             localStorage save/load
-    staging.js          deterministic screenshot staging
-main.ts                 the entry program: copies game/ + screenshots/,
-                        writes dossier.json with vendor/makefun-game.ts
-screenshots/            four real renders of the game
-```
+## Source layout
 
-## Originality
-
-Everything in Palmera Heat is invented for this entry: the city of Palmera, its characters (Mara Voss, Theo Brandt, Lena Kaur, Vera Castellan), its story, its names, its art and its synthesized music. Nothing is taken from Rockstar Games' Grand Theft Auto series or any other commercial game.
+One clear job per file under `game/src/`: `config.js` (catalogues), `world.js`
+(city + sunset), `vehicles.js` (cars + physics), `traffic.js`, `pedestrians.js`,
+`police.js` (wanted + pursuit), `missions.js` (8 story missions), `combat.js`,
+`hud.js` (panels + minimap), `save.js`, `audio.js` (procedural WebAudio),
+`effects.js` (particles), `input.js`, `player.js` (on-foot + camera), `shots.js`
+(screenshot staging), `main.js` (entry + menus + game loop).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see `LICENSE`. All names, characters, places and story are original.

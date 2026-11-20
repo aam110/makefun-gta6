@@ -1,133 +1,97 @@
-// Palmera Heat — shared tuning, palette and city layout.
-// Every number the rest of the game agrees on lives here, so the city,
-// the traffic, the missions and the minimap all describe the same place.
+// CAYO BRAVO — shared constants, catalogues and the seeded random generator.
+// Every name, place and vehicle here is original, invented for this game.
 
-export const SAVE_KEY = 'palmera-heat-save-v1';
-export const GAME_TITLE = 'PALMERA HEAT';
-
-// --- City grid -------------------------------------------------------------
-// Roads run every 64 units; blocks sit between them. The grid is square,
-// the beach and the ocean lie to the east (positive x).
-export const CITY = {
-  half: 330,
-  roadSpacing: 64,
+export const WORLD = {
+  half: 300,            // playable half-extent in metres (600 x 600 city)
+  roadGap: 60,          // grid spacing between streets
   roadWidth: 14,
-  sidewalk: 5,
-  blockSize: 50,
-  roads: [-320, -256, -192, -128, -64, 0, 64, 128, 192, 256, 320],
-  beachRoadX: 352,
-  beachX: 336,
-  sandX: 344,
-  oceanX: 398,
-  groundMinX: -450,
-  groundMaxX: 750,
-  groundMinZ: -450,
-  groundMaxZ: 450,
+  beachX: -255,         // west of this line: sand, then sea
+  seaX: -295,
+  sunsetHour: 18.07,    // golden hour start (18:04)
 };
 
-// Block centres sit halfway between neighbouring roads.
-export const BLOCK_CENTERS = [-288, -224, -160, -96, -32, 32, 96, 160, 224, 288];
-
-// --- Landmarks (block centres, or beach coordinates) -----------------------
-export const LANDMARKS = {
-  casino: { x: 96, z: -96, name: 'Meridian Casino' },
-  garage: { x: -96, z: 96, name: "Theo's Garage" },
-  apartment: { x: -32, z: -160, name: "Lena's Apartment" },
-  safehouse: { x: 160, z: 160, name: "Mara's Safehouse" },
-  stadium: { x: -224, z: -224, name: 'Palmera Bowl' },
-  park: { x: 224, z: -224, name: 'Coral Gardens' },
-  policeStation: { x: -160, z: 32, name: 'Palmera PD' },
-  hospital: { x: 32, z: 224, name: 'St. Selma Hospital' },
-  marina: { x: 372, z: 224, name: 'Sunset Marina' },
-  lighthouse: { x: 372, z: -288, name: 'North Point Light' },
-  boardwalk: { x: 352, z: 0, name: 'Boardwalk' },
-  plaza: { x: 32, z: -32, name: 'Meridian Plaza' },
-};
-
-// Blocks that hold a landmark instead of ordinary buildings.
-export const LANDMARK_BLOCKS = new Set([
-  '96,-96', '-96,96', '-32,-160', '160,160', '-224,-224',
-  '224,-224', '-160,32', '32,224', '32,-32', '160,-96',
-]);
-
-// --- Sun-soaked palette ----------------------------------------------------
-export const PALETTE = {
-  sky: 0x8fd2ef,
-  fog: 0xcfe9f4,
-  sun: 0xfff2d0,
-  sunIntensity: 2.6,
-  hemiSky: 0xbfe3ff,
-  hemiGround: 0x8a7a5a,
-  hemiIntensity: 1.1,
-  grass: 0x86b364,
-  grassDry: 0xa8bd6a,
-  asphalt: 0x3d4148,
-  sidewalk: 0xd9cfb8,
-  sand: 0xecd9a0,
-  ocean: 0x2f9bc4,
-  oceanDeep: 0x1b6ea6,
-  building: [
-    0xf2e3c9, 0xe8b4a0, 0x9fc8c0, 0xd9a441, 0xf5f0e6,
-    0xc96f5a, 0x7fb3d5, 0xe6d8b8, 0xb7a6d9, 0x8fbc8f,
-  ],
-  downtown: [0xdfe8ee, 0xc7d6e2, 0xe8e2d4, 0xb9cdd6],
-  casinoGlass: 0x2e6f8e,
-  casinoGold: 0xe8b93c,
-};
-
-// --- Player / vehicle tuning ----------------------------------------------
-export const PLAYER = {
-  walkSpeed: 6.5,
-  sprintSpeed: 10.5,
-  radius: 0.7,
-  maxHealth: 100,
-  jumpSpeed: 8.5,
-  gravity: 22,
-};
-
-export const CAR = {
-  maxSpeed: 34,
-  sportMaxSpeed: 42,
-  accel: 16,
-  brake: 30,
-  reverseMax: 10,
-  steerRate: 1.9,
-  radius: 2.3,
-  maxHealth: 100,
-};
-
-export const WANTED = {
-  maxStars: 5,
-  heatPerStar: 200,
-  steal: 120,
-  hitPed: 150,
-  killPed: 260,
-  shoot: 70,
-  killCop: 420,
-  ramCop: 160,
-  decayHidden: 9,
-  decaySeen: 2,
-  bustedSeconds: 2.5,
-};
-
-export const CAR_COLORS = [
-  0xc23b2e, 0x2e6fc2, 0xe8c33c, 0x3aa655, 0xe8e8e8, 0x222222,
-  0xd97b2e, 0x7a4fb0, 0x38b8b0, 0xb03a6b, 0x8a9a5b, 0x4a5d7a,
+export const DISTRICTS = [
+  { name: 'PUERTO ARENA', street: 'Arena Boulevard', x0: -300, x1: -180, z0: -300, z1: 300, heat: 12 },
+  { name: 'MERCADO VIEJO', street: 'Calle del Mercado', x0: -180, x1: -60, z0: -300, z1: -40, heat: 28 },
+  { name: 'BARRIO LUMBRE', street: 'Lumbre Avenue', x0: -180, x1: -60, z0: -40, z1: 300, heat: 41 },
+  { name: 'ALTAVISTA', street: 'Torre Central', x0: -60, x1: 120, z0: -300, z1: 60, heat: 22 },
+  { name: 'CORAL ROW', street: 'Coral Row', x0: -60, x1: 120, z0: 60, z1: 300, heat: 35 },
+  { name: 'MARINA DEL SOL', street: 'Marina Esplanade', x0: 120, x1: 300, z0: -300, z1: 0, heat: 18 },
+  { name: 'EL FARO', street: 'Faro Point Road', x0: 120, x1: 300, z0: 0, z1: 300, heat: 30 },
 ];
 
-export const PED_SHIRTS = [
-  0xe85d4a, 0x4a90e8, 0xf2c14e, 0x7bc47f, 0xe8e8e8, 0x9b59b6,
-  0x1abc9c, 0xe67e22, 0x34495e, 0xf1948a, 0x5dade2, 0x58d68d,
+export function districtAt(x, z) {
+  for (const d of DISTRICTS) if (x >= d.x0 && x < d.x1 && z >= d.z0 && z < d.z1) return d;
+  return DISTRICTS[0];
+}
+
+// Deterministic RNG so every screenshot run stages the same city.
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function rng() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export const VEHICLE_MODELS = [
+  { name: 'VELAR STORM GT', body: 0xff5a1a, top: 62, accel: 26, grip: 2.6, kind: 'sport' },
+  { name: 'COMETA S', body: 0x2fdcff, top: 55, accel: 22, grip: 2.4, kind: 'sport' },
+  { name: 'BRISA COUPE', body: 0xffd21f, top: 48, accel: 19, grip: 2.2, kind: 'coupe' },
+  { name: 'MARLIN SEDAN', body: 0xe8e8e8, top: 42, accel: 16, grip: 2.0, kind: 'sedan' },
+  { name: 'LOBO PICKUP', body: 0x37e06a, top: 44, accel: 17, grip: 2.0, kind: 'truck' },
+  { name: 'TIBURON GT', body: 0xc02fff, top: 58, accel: 24, grip: 2.5, kind: 'sport' },
+  { name: 'SOL TAXI', body: 0xffc21f, top: 40, accel: 15, grip: 2.0, kind: 'sedan' },
+  { name: 'CBPD INTERCEPTOR', body: 0xf2f2f2, top: 58, accel: 25, grip: 2.8, kind: 'police' },
 ];
 
-export const PED_SKINS = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac];
-export const PED_PANTS = [0x2c3e50, 0x5d6d7e, 0x6e2c00, 0x1a5276, 0x4d5656];
+export const WEAPONS = [
+  { name: 'FISTS', ammo: Infinity, damage: 12, rate: 0.45, range: 2.6, auto: false },
+  { name: 'P9', ammo: 72, damage: 22, rate: 0.28, range: 90, auto: false },
+  { name: 'VIPER SMG', ammo: 150, damage: 14, rate: 0.09, range: 70, auto: true },
+  { name: 'BREAKER 12G', ammo: 18, damage: 55, rate: 0.85, range: 30, auto: false },
+  { name: 'LONGBOW', ammo: 24, damage: 90, rate: 1.1, range: 160, auto: false },
+];
 
-// Mission rewards and story beats live in missions.js; this is the cash the
-// player starts with and what a bust or a hospital visit costs.
-export const ECONOMY = {
-  startCash: 250,
-  bustedFine: 200,
-  wastedBill: 150,
-  taxiFare: 0,
-};
+export const CREW = [
+  { key: 'z', name: 'Nadia Kestrel', role: 'DRIVER', ability: 'SWAP PLATES', color: '#ff7a1a', initial: 'N', cooldown: 45,
+    lines: ["Plates swapped — they lost the car, Río.", 'Fresh plates. Drive like you mean it.'] },
+  { key: 'x', name: 'Tomás Ibarra', role: 'MECHANIC', ability: 'QUICK FIX', color: '#37e06a', initial: 'T', cooldown: 60,
+    lines: ['Patched her up — good as new, boss.', 'Engine purrs again. Go get them.'] },
+  { key: 'c', name: 'Selma Okafor', role: 'LOOKOUT', ability: 'EYES OUT', color: '#c02fff', initial: 'S', cooldown: 40,
+    lines: ['Eyes up — I marked every unit on your map.', 'I see them all. Thread the gaps.'] },
+];
+
+export const RANKS = [
+  { name: 'STREET RAT', rp: 0 }, { name: 'RUNNER', rp: 500 }, { name: 'HUSTLER', rp: 1200 },
+  { name: 'FIXER', rp: 2600 }, { name: 'SHOT CALLER', rp: 5200 }, { name: 'KING OF CAYO', rp: 9000 },
+];
+
+export const RADIO_STATIONS = [
+  { name: 'BRAVO 101.5', genre: 'Island Heat', track: 'Island Heat · Los Rayos del Sol', tempo: 112, scale: [0, 3, 5, 7, 10] },
+  { name: 'SOL FM 88.2', genre: 'Sunset Groove', track: 'Marina Lights · Vela Roja', tempo: 96, scale: [0, 2, 4, 7, 9] },
+  { name: 'ONDA 96.7', genre: 'Night Drive', track: 'Neon Tide · DJ Coral', tempo: 124, scale: [0, 3, 5, 6, 10] },
+];
+
+export const POLICE_CALLSIGNS = [
+  'FALCON-7', 'VIPER-12', 'CORAL-9', 'TIDE-44', 'GECKO-21', 'MARLIN-3',
+  'REEF-18', 'SOL-5', 'BRAVO-2', 'DUNE-31', 'ORCA-8', 'SIREN-27',
+];
+export const POLICE_TACTICS = ['RAMMING', 'FLANKING', 'CHASING', 'ROADBLOCK', 'SPOTLIGHT', 'MARKSMAN'];
+
+export const PLAYER_NAME = 'Dario "Río" Voss';
+export const CITY_NAME = 'CAYO BRAVO';
+export const SAVE_KEY = 'cayobravo-save-';
+export const SETTINGS_KEY = 'cayobravo-settings';
+
+export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+export function lerp(a, b, t) { return a + (b - a) * t; }
+export function dist2D(ax, az, bx, bz) { return Math.hypot(ax - bx, az - bz); }
+export function formatMoney(n) { return '$' + Math.floor(n).toLocaleString('en-US'); }
+export function formatClock(hourFloat) {
+  const h = Math.floor(hourFloat) % 24;
+  const m = Math.floor((hourFloat % 1) * 60);
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}

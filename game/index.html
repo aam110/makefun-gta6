@@ -3,155 +3,172 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Palmera Heat — Open-World Crime in Palmera City</title>
-<link rel="stylesheet" href="./css/style.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230c1e2a'/%3E%3Ccircle cx='32' cy='26' r='13' fill='%23ffd24d'/%3E%3Crect x='10' y='42' width='44' height='6' rx='3' fill='%2338b8b0'/%3E%3C/svg%3E">
+<title>CAYO BRAVO — Open-World Crime</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
 <script type="importmap">
-{
-  "imports": {
-    "three": "./vendor/three.module.min.js"
-  }
-}
+{ "imports": { "three": "./vendor/three.module.min.js" } }
 </script>
 </head>
 <body>
-<div id="app"></div>
+<canvas id="scene"></canvas>
 
 <!-- ============ HUD ============ -->
 <div id="hud" class="hidden">
-  <div id="vignette"></div>
-  <div id="wanted-flash"></div>
-
-  <div id="obj-panel">
-    <div id="obj-title">FREE ROAM</div>
-    <div id="obj-text">Explore Palmera City.</div>
-    <div id="obj-timer" class="hidden">0:00</div>
+  <!-- Mission card -->
+  <div id="mission-card" class="panel">
+    <div class="mc-head"><span id="mc-title">MISSION 1 · FIRST LIGHT</span><span id="mc-timer"></span></div>
+    <div class="mc-stage"><span id="mc-stage-pill">STAGE 1/3</span><span id="mc-stage-name">MEET NADIA</span></div>
+    <div id="mc-bar"><div id="mc-bar-fill"></div></div>
+    <div id="mc-objective">Drive to the marina and meet Nadia.</div>
+    <div id="mc-next"><b>NEXT</b> <span id="mc-next-text">Follow her to the garage</span></div>
   </div>
 
+  <!-- Police response panel -->
+  <div id="police-panel" class="panel hidden">
+    <div class="pp-head"><span class="pp-dot"></span>CBPD RESPONSE <span id="pp-count">4 UNITS</span><span id="pp-code">CODE 3</span></div>
+    <div id="pp-rows"></div>
+    <div id="pp-foot"></div>
+  </div>
+
+  <!-- Top right: clock, money, wanted, rank -->
   <div id="top-right">
-    <div id="stars"></div>
-    <div id="cash">$250</div>
+    <div id="clock">18:04</div>
+    <div id="money">$1,250</div>
+    <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+    <div id="air-unit" class="hidden">▲ AIR UNIT DEPLOYED</div>
+    <div id="rank-box"><span id="rank-name">HUSTLER</span><span id="rank-num">RANK 3</span>
+      <div id="rp-bar"><div id="rp-fill"></div></div>
+      <div id="rp-text">1,850 / 3,000 RP</div>
+    </div>
   </div>
 
+  <!-- Weapon slots -->
+  <div id="weapons">
+    <div class="wslot" data-slot="0"><span class="wkey">1</span><span class="wname">FISTS</span><span class="wammo">∞</span></div>
+    <div class="wslot" data-slot="1"><span class="wkey">2</span><span class="wname">P9</span><span class="wammo">72</span></div>
+    <div class="wslot" data-slot="2"><span class="wkey">3</span><span class="wname">VIPER SMG</span><span class="wammo">150</span></div>
+    <div class="wslot" data-slot="3"><span class="wkey">4</span><span class="wname">BREAKER 12G</span><span class="wammo">18</span></div>
+    <div class="wslot" data-slot="4"><span class="wkey">5</span><span class="wname">LONGBOW</span><span class="wammo">24</span></div>
+  </div>
+
+  <!-- Crew abilities -->
+  <div id="crew">
+    <div class="crew-btn" id="crew-z"><span class="ckey">Z</span><div><b>SWAP PLATES</b><i>Nadia · Driver</i></div><span class="ccd" id="cd-z"></span></div>
+    <div class="crew-btn" id="crew-x"><span class="ckey">X</span><div><b>QUICK FIX</b><i>Tomás · Mechanic</i></div><span class="ccd" id="cd-x"></span></div>
+    <div class="crew-btn" id="crew-c"><span class="ckey">C</span><div><b>EYES OUT</b><i>Selma · Lookout</i></div><span class="ccd" id="cd-c"></span></div>
+  </div>
+
+  <!-- Bottom left: location + minimap + vitals -->
   <div id="bottom-left">
-    <div id="health-row">
-      <span id="health-label">HP</span>
-      <div id="health-bar"><div id="health-fill"></div></div>
-      <span id="health-text">100</span>
+    <div id="location"><span id="loc-district">PUERTO ARENA</span><span id="loc-street">Arena Boulevard</span>
+      <div id="loc-bar"><div id="loc-fill"></div></div><span id="loc-heat">CALM · 12</span>
     </div>
-    <div id="weapon-name">PISTOL ∞</div>
+    <canvas id="minimap" width="220" height="220"></canvas>
+    <div id="vitals">
+      <div class="vrow"><span>HEALTH</span><div class="vbar"><div id="hp-fill"></div></div><b id="hp-num">100</b></div>
+      <div class="vrow"><span>ARMOUR</span><div class="vbar"><div id="ar-fill"></div></div><b id="ar-num">50</b></div>
+    </div>
   </div>
 
+  <!-- Dialogue -->
+  <div id="dialogue" class="hidden">
+    <div id="dlg-portrait">N</div>
+    <div><div id="dlg-name">NADIA KESTREL <span id="dlg-role">DRIVER</span></div><div id="dlg-text"></div></div>
+  </div>
+
+  <!-- Bottom right: speedo + vehicle + radio -->
   <div id="bottom-right">
-    <canvas id="minimap" width="190" height="190"></canvas>
-    <div id="speedo" class="hidden">
-      <span id="speed-value">0</span><span id="speed-unit">km/h</span>
-      <span id="gear">D</span>
+    <div id="radio"><span id="radio-station">♪ BRAVO 101.5</span><span id="radio-track">Island Heat · Los Rayos del Sol</span></div>
+    <div id="vehicle-box">
+      <div id="veh-name">VELAR STORM GT</div>
+      <div id="veh-cond"><span>CONDITION</span><div class="vbar"><div id="cond-fill"></div></div><b id="cond-num">100%</b></div>
+      <div id="speed-row"><span id="speed">0</span><span id="speed-unit">km/h</span><span id="gear">N</span></div>
     </div>
   </div>
 
-  <div id="crosshair" class="hidden"><div class="dot"></div></div>
+  <!-- Centre prompts -->
   <div id="prompt" class="hidden"></div>
-
-  <div id="banner" class="hidden">
-    <div id="banner-title"></div>
-    <div id="banner-sub"></div>
-  </div>
-
-  <div id="mission-card" class="hidden">
-    <div id="mission-card-title"></div>
-    <div id="mission-card-brief"></div>
-    <div id="mission-card-giver"></div>
-  </div>
-
-  <div id="subtitle" class="hidden">
-    <span id="subtitle-who"></span><span id="subtitle-text"></span>
-  </div>
-
+  <div id="crosshair" class="hidden">＋</div>
+  <div id="marker-dist" class="hidden">▼ 142 m</div>
   <div id="toast" class="hidden"></div>
+  <div id="wanted-banner" class="hidden">WANTED ★★★★</div>
 </div>
 
-<!-- ============ Title screen ============ -->
+<!-- ============ TITLE SCREEN ============ -->
 <div id="title-screen">
-  <div class="title-shade"></div>
-  <div class="title-inner">
-    <div class="title-kicker">AN OPEN-WORLD CRIME STORY</div>
-    <h1 class="title-main">PALMERA<br><span>HEAT</span></h1>
-    <p class="title-tag">Sun, salt, and stolen cars. Mara Voss is back — and the Meridian Syndicate is going down.</p>
-    <div class="title-buttons">
-      <button id="btn-new" class="btn primary">NEW GAME</button>
-      <button id="btn-continue" class="btn hidden">CONTINUE</button>
-      <button id="btn-help" class="btn">HOW TO PLAY</button>
-      <button id="btn-sound" class="btn small">SOUND: ON</button>
+  <div id="title-inner">
+    <div id="title-kicker">AN OPEN-WORLD CRIME GAME · PLAYABLE OFFLINE</div>
+    <h1 id="title-logo">CAYO<br>BRAVO</h1>
+    <div id="title-tag">One island. One crew. One last sunset before the Harbormaster owns it all.</div>
+    <div id="title-menu">
+      <button class="tbtn" id="btn-new">▶ NEW GAME</button>
+      <button class="tbtn" id="btn-load">▣ LOAD GAME</button>
+      <button class="tbtn" id="btn-settings">⚙ SETTINGS</button>
+      <button class="tbtn" id="btn-how">? HOW TO PLAY</button>
     </div>
-    <div id="save-info"></div>
-    <div class="title-foot">
-      <span>5 story missions</span><i>·</i>
-      <span>Open city, traffic &amp; pedestrians</span><i>·</i>
-      <span>Police wanted system</span><i>·</i>
-      <span>Save &amp; continue</span>
-    </div>
-    <div class="title-credit">A fully original game — its city, characters, story and music are invented for this entry. No assets from any commercial game.</div>
+    <div id="title-foot">WASD drive / walk · E enter car · F punch · Mouse aim + click shoot · 1–5 weapons · Z/X/C crew · P pause · M radio</div>
   </div>
 </div>
 
-<!-- ============ Pause ============ -->
-<div id="pause-screen" class="hidden">
-  <div class="panel">
-    <h2>PAUSED</h2>
-    <p class="panel-sub">Palmera waits for no one. Well — except now.</p>
-    <button id="btn-resume" class="btn primary">RESUME</button>
-    <button id="btn-save" class="btn">SAVE GAME</button>
-    <button id="btn-restart-mission" class="btn">RESTART MISSION</button>
-    <button id="btn-quit" class="btn">SAVE &amp; QUIT TO TITLE</button>
-    <p class="panel-hint">Esc / P — resume &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; E — enter car / interact</p>
+<!-- ============ SAVE SLOTS ============ -->
+<div id="slots-screen" class="overlay hidden">
+  <div class="overlay-box">
+    <h2>CHOOSE A SAVE SLOT</h2>
+    <div id="slot-list"></div>
+    <button class="tbtn" id="btn-slots-back">← BACK</button>
   </div>
 </div>
 
-<!-- ============ How to play ============ -->
-<div id="help-screen" class="hidden">
-  <div class="panel wide">
+<!-- ============ SETTINGS ============ -->
+<div id="settings-screen" class="overlay hidden">
+  <div class="overlay-box">
+    <h2>SETTINGS</h2>
+    <label>Volume <input type="range" id="set-volume" min="0" max="100" value="70"></label>
+    <label>Mouse sensitivity <input type="range" id="set-sens" min="20" max="200" value="100"></label>
+    <label>Quality <select id="set-quality"><option value="high">High (shadows on)</option><option value="low">Low (fast)</option></select></label>
+    <label>Radio station <select id="set-radio"><option>BRAVO 101.5</option><option>SOL FM 88.2</option><option>ONDA 96.7</option></select></label>
+    <button class="tbtn" id="btn-settings-back">✓ DONE</button>
+  </div>
+</div>
+
+<!-- ============ HOW TO PLAY ============ -->
+<div id="how-screen" class="overlay hidden">
+  <div class="overlay-box">
     <h2>HOW TO PLAY</h2>
-    <div class="controls-grid">
-      <div><b>W A S D</b><span>Move / drive</span></div>
-      <div><b>Mouse</b><span>Look around (click to lock)</span></div>
-      <div><b>← → ↑ ↓</b><span>Turn camera</span></div>
-      <div><b>Shift</b><span>Sprint</span></div>
-      <div><b>Space</b><span>Jump / handbrake</span></div>
-      <div><b>E</b><span>Steal / exit car · interact</span></div>
-      <div><b>Left click</b><span>Shoot</span></div>
-      <div><b>F</b><span>Punch</span></div>
-      <div><b>H</b><span>Horn</span></div>
-      <div><b>M</b><span>Mute sound</span></div>
-      <div><b>Esc / P</b><span>Pause</span></div>
-    </div>
-    <p class="panel-sub">Follow the golden <b>M</b> on the minimap to start the next story mission. Stealing cars, hurting people and shooting raise your wanted level — break line of sight from the police and the heat cools off. Get busted standing still next to a cop, or wasted at zero health. Your safehouse heals you and saves the game.</p>
-    <button id="btn-help-close" class="btn primary">GOT IT</button>
+    <p><b>Dario "Río" Voss</b> is back on Cayo Bravo. Don Aurelio Salas — the Harbormaster — is buying the whole island, pier by pier. Build your crew, run 8 story missions, and take the island back before the last ferry sails.</p>
+    <p><b>Drive:</b> W accelerate · S brake/reverse · A/D steer · Space handbrake · E enter/exit any car.<br>
+    <b>On foot:</b> WASD move · Shift run · F punch · Mouse aim, click to shoot · 1–5 switch weapon.<br>
+    <b>Crew:</b> Z Swap Plates (−1 wanted) · X Quick Fix (repair car) · C Eyes Out (spot police).<br>
+    <b>Wanted:</b> stars rise when police see crime. Break line of sight to cool down; at 4★ a helicopter joins the hunt.<br>
+    <b>Save:</b> pause menu (P) or the garage — 3 slots, stored in your browser.</p>
+    <button class="tbtn" id="btn-how-back">← BACK</button>
   </div>
 </div>
 
-<!-- ============ Wasted / Busted / Failed ============ -->
-<div id="end-screen" class="hidden">
-  <div class="end-inner">
+<!-- ============ PAUSE MENU ============ -->
+<div id="pause-screen" class="overlay hidden">
+  <div class="overlay-box">
+    <h2>PAUSED — CAYO BRAVO</h2>
+    <div id="pause-stats"></div>
+    <button class="tbtn" id="btn-resume">▶ RESUME</button>
+    <button class="tbtn" id="btn-save">▣ SAVE GAME</button>
+    <button class="tbtn" id="btn-pause-settings">⚙ SETTINGS</button>
+    <button class="tbtn" id="btn-quit">■ QUIT TO TITLE</button>
+  </div>
+</div>
+
+<!-- ============ END SCREENS ============ -->
+<div id="end-screen" class="overlay hidden">
+  <div class="overlay-box">
     <h2 id="end-title">WASTED</h2>
-    <p id="end-sub"></p>
-    <div class="title-buttons">
-      <button id="btn-retry" class="btn primary">RETRY MISSION</button>
-      <button id="btn-freeroam" class="btn">FREE ROAM</button>
-    </div>
+    <p id="end-text"></p>
+    <button class="tbtn" id="btn-end-retry">↻ RETRY MISSION</button>
+    <button class="tbtn" id="btn-end-title">■ TITLE SCREEN</button>
   </div>
 </div>
 
-<!-- ============ Story complete ============ -->
-<div id="complete-screen" class="hidden">
-  <div class="panel">
-    <h2 class="gold">PALMERA IS YOURS</h2>
-    <p class="panel-sub">Vera Castellan is finished. The Meridian Syndicate is ash. Mara Voss watches the sunset over Sunset Marina — the city she came home to save.</p>
-    <p id="complete-stats" class="panel-sub"></p>
-    <button id="btn-complete-continue" class="btn primary">KEEP EXPLORING</button>
-  </div>
-</div>
-
-<script type="module" src="./src/main.js"></script>
+<div id="loading">LOADING CAYO BRAVO…</div>
+<script type="module" src="src/main.js"></script>
 </body>
 </html>
